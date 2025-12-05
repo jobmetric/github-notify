@@ -28,7 +28,7 @@ jobs:
             echo "Telegram credentials not set. Skipping PR notification."
             exit 0
           fi
-          
+
           # Get PR details
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_BODY="${{ github.event.pull_request.body }}"
@@ -43,31 +43,31 @@ jobs:
           CHANGED_FILES="${{ github.event.pull_request.changed_files }}"
           ADDITIONS="${{ github.event.pull_request.additions }}"
           DELETIONS="${{ github.event.pull_request.deletions }}"
-          
+
           # Format date (convert ISO 8601 to readable format)
           if [ -n "$CREATED_AT" ]; then
             CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CREATED_AT")
           else
             CREATED_DATE="N/A"
           fi
-          
+
           # Determine PR status
           if [ "$IS_DRAFT" = "true" ]; then
             PR_STATUS="⏳ <b>Draft</b>"
           else
             PR_STATUS="✅ <b>Ready for Review</b>"
           fi
-          
+
           # Escape HTML special characters
           PR_TITLE_ESC=$(echo "$PR_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
           PR_BODY_ESC=$(echo "$PR_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
-          
+
           # Add channel link if provided
           CHANNEL_INFO=""
           if [ -n "$TELEGRAM_CHANNEL_LINK" ]; then
             CHANNEL_INFO=$'\n'"📢 <b>Channel:</b> $TELEGRAM_CHANNEL_LINK"
           fi
-          
+
           # Build statistics section
           STATS=""
           if [ -n "$COMMITS" ] && [ "$COMMITS" != "null" ]; then
@@ -79,27 +79,22 @@ jobs:
           if [ -n "$ADDITIONS" ] && [ "$ADDITIONS" != "null" ] && [ -n "$DELETIONS" ] && [ "$DELETIONS" != "null" ]; then
             STATS="${STATS}${STATS:+ | }➕${ADDITIONS} ➖${DELETIONS}"
           fi
-          
+
           # Build message with improved HTML formatting
-          MESSAGE="━━━━━━━━━━━━━━━━━━━━"$'\n'
-          MESSAGE="${MESSAGE}🔔 <b>Pull Request #${PR_NUMBER}</b>"$'\n'
+          MESSAGE="${MESSAGE}<b>Pull Request #${PR_NUMBER}</b>"$'\n'
           MESSAGE="${MESSAGE}━━━━━━━━━━━━━━━━━━━━"$'\n\n'
-          MESSAGE="${MESSAGE}📋 <b>${PR_TITLE_ESC}</b>"$'\n\n'
-          MESSAGE="${MESSAGE}📦 <b>Repository:</b> <code>${REPO}</code>"$'\n'
-          MESSAGE="${MESSAGE}👤 <b>Author:</b> <code>${AUTHOR}</code>"$'\n'
-          MESSAGE="${MESSAGE}📅 <b>Created:</b> ${CREATED_DATE}"$'\n'
-          if [ -n "$STATS" ]; then
-            MESSAGE="${MESSAGE}${STATS}"$'\n'
-          fi
+          MESSAGE="${MESSAGE}<b>${PR_TITLE_ESC}</b>"$'\n\n'
           if [ -n "$PR_BODY_ESC" ] && [ "$PR_BODY_ESC" != "null" ]; then
-            MESSAGE="${MESSAGE}"$'\n'"📝 <b>Description:</b>"$'\n'"${PR_BODY_ESC}"
+            MESSAGE="${MESSAGE}"$'\n'" Description:"$'\n'"<b>${PR_BODY_ESC}</b>"
           fi
-          if [ -n "$CHANNEL_INFO" ]; then
-            MESSAGE="${MESSAGE}${CHANNEL_INFO}"
-          fi
+          MESSAGE="${MESSAGE}━━━━━━━━━━━━━━━━━━━━"$'\n\n'
+          MESSAGE="${MESSAGE}Repo: <b><code>${REPO}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}━━━━━━━━━━━━━━━━━━━━"$'\n\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n'
           MESSAGE="${MESSAGE}"$'\n\n'"━━━━━━━━━━━━━━━━━━━━"$'\n'
-          MESSAGE="${MESSAGE}🔗 <a href=\"${PR_URL}\">View Pull Request on GitHub</a>"
-          
+          MESSAGE="${MESSAGE}<a href=\"${PR_URL}\">View Pull Request on GitHub</a>"
+
           # Send message to Telegram and capture response
           echo "Sending notification to Telegram..."
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
@@ -107,10 +102,10 @@ jobs:
             --data-urlencode "text=$MESSAGE" \
             -d parse_mode="HTML" \
             -d disable_web_page_preview=true)
-          
+
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
-          
+
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Telegram PR notification sent successfully"
             echo "Response: $BODY"
