@@ -6,15 +6,9 @@ on:
       chat_id:
         description: "Target Telegram chat ID (user, group, or channel)"
         required: true
-        type: string
       channel_link:
         description: "Optional Telegram channel link to include in the message"
         required: false
-        type: string
-    secrets:
-      bot_token:
-        description: "Telegram bot token created via BotFather"
-        required: true
 
 jobs:
   notify:
