@@ -1,0 +1,29 @@
+name: "Send Telegram Message"
+description: "Send a message to a Telegram chat using a bot token."
+author: "JobMetric"
+
+inputs:
+  bot_token:
+    description: "Telegram bot token created via BotFather"
+    required: true
+  chat_id:
+    description: "Target Telegram chat ID (user, group, or channel)"
+    required: true
+  message:
+    description: "Message text that will be sent to Telegram"
+    required: true
+  parse_mode:
+    description: "Telegram parse_mode (Markdown, HTML, MarkdownV2)"
+    required: false
+    default: "Markdown"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send Telegram message
+      shell: bash
+      run: |
+        curl -sS "https://api.telegram.org/bot${{ inputs.bot_token }}/sendMessage" \
+          -d "chat_id=${{ inputs.chat_id }}" \
+          -d "text=${{ inputs.message }}" \
+          -d "parse_mode=${{ inputs.parse_mode }}"
