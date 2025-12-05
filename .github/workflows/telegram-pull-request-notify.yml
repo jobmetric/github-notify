@@ -87,12 +87,9 @@ jobs:
           if [ -n "$PR_BODY_ESC" ] && [ "$PR_BODY_ESC" != "null" ]; then
             MESSAGE="${MESSAGE}"$'\n'" Description:"$'\n'"<b>${PR_BODY_ESC}</b>"
           fi
-          MESSAGE="${MESSAGE}━━━━━━━━━━━━━━━━━━━━"$'\n\n'
           MESSAGE="${MESSAGE}Repo: <b><code>${REPO}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
-          MESSAGE="${MESSAGE}━━━━━━━━━━━━━━━━━━━━"$'\n\n'
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n'
-          MESSAGE="${MESSAGE}"$'\n\n'"━━━━━━━━━━━━━━━━━━━━"$'\n'
           MESSAGE="${MESSAGE}<a href=\"${PR_URL}\">View Pull Request on GitHub</a>"
 
           # Send message to Telegram and capture response
