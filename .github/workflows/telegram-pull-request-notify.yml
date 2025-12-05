@@ -84,7 +84,7 @@ jobs:
           MESSAGE="${MESSAGE}<b>Pull Request #${PR_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PR_TITLE_ESC}</b>"$'\n\n'
           if [ -n "$PR_BODY_ESC" ] && [ "$PR_BODY_ESC" != "null" ]; then
-            MESSAGE="${MESSAGE}"$'\n'"<b>${PR_BODY_ESC}</b> "$'\n\n'
+            MESSAGE="${MESSAGE}"$"<b>${PR_BODY_ESC}</b> "$'\n\n'
           fi
           MESSAGE="${MESSAGE}Repo: <b><code>${REPO}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
