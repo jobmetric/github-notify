@@ -1,0 +1,30 @@
+name: "Telegram Pull Request Notify"
+
+on:
+  workflow_call:
+    inputs:
+      chat_id:
+        description: "Telegram chat ID that receives PR notifications"
+        required: true
+        type: string
+    secrets:
+      bot_token:
+        description: "Telegram bot token kept as a GitHub secret"
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send PR notification to Telegram
+        uses: jobmetric/github-notify/telegram@v1
+        with:
+          bot_token: ${{ secrets.bot_token }}
+          chat_id:  ${{ inputs.chat_id }}
+          message: |
+            📦 [${{ github.repository }}]
+            🔹 Pull Request: ${{ github.event.action }}
+            #${{ github.event.pull_request.number }} – ${{ github.event.pull_request.title }}
+            👤 by ${{ github.event.pull_request.user.login }}
+            🔗 ${{ github.event.pull_request.html_url }}
