@@ -2,7 +2,10 @@ name: Telegram Pull Request Notification
 
 on:
   workflow_call:
-    inputs:
+    secrets:
+      bot_token:
+        description: "Telegram bot token created via BotFather"
+        required: true
       chat_id:
         description: "Target Telegram chat ID (user, group, or channel)"
         required: true
@@ -17,8 +20,8 @@ jobs:
       - name: Send Telegram notification
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
-          TELEGRAM_CHAT_ID: ${{ inputs.chat_id }}
-          TELEGRAM_CHANNEL_LINK: ${{ inputs.channel_link }}
+          TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
+          TELEGRAM_CHANNEL_LINK: ${{ secrets.channel_link }}
         run: |
           # Skip if credentials not set
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
