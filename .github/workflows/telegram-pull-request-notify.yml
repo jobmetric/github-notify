@@ -81,7 +81,7 @@ jobs:
           fi
 
           # Build message with improved HTML formatting
-          MESSAGE="${MESSAGE}<b>Pull Request #${PR_NUMBER}</b>"$'\n'
+          MESSAGE="${MESSAGE}<b>Pull Request #${PR_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PR_TITLE_ESC}</b>"$'\n\n'
           if [ -n "$PR_BODY_ESC" ] && [ "$PR_BODY_ESC" != "null" ]; then
             MESSAGE="${MESSAGE}"$'\n'""$'\n'"<b>${PR_BODY_ESC}</b> "$'\n\n'
