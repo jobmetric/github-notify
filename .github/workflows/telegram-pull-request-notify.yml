@@ -1,30 +1,35 @@
-name: "Telegram Pull Request Notify"
+name: Telegram Pull Request Notification
 
 on:
   workflow_call:
     inputs:
       chat_id:
-        description: "Telegram chat ID that receives PR notifications"
+        description: "Target Telegram chat ID (user, group, or channel)"
         required: true
         type: string
     secrets:
       bot_token:
-        description: "Telegram bot token kept as a GitHub secret"
+        description: "Telegram bot token created via BotFather"
         required: true
 
 jobs:
   notify:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Send PR notification to Telegram
-        uses: jobmetric/github-notify/telegram@v1
+      - name: Send Telegram notification
+        uses: jobmetric/github-notify/telegram@main
         with:
           bot_token: ${{ secrets.bot_token }}
-          chat_id:  ${{ inputs.chat_id }}
+          chat_id: ${{ inputs.chat_id }}
           message: |
-            📦 [${{ github.repository }}]
-            🔹 Pull Request: ${{ github.event.action }}
-            #${{ github.event.pull_request.number }} – ${{ github.event.pull_request.title }}
-            👤 by ${{ github.event.pull_request.user.login }}
-            🔗 ${{ github.event.pull_request.html_url }}
+            🔔 **Pull Request ${{ github.event.action }}**
+
+            **${{ github.event.pull_request.title }}**
+
+            Repository: `${{ github.repository }}`
+            Author: `${{ github.event.pull_request.user.login }}`
+            Branch: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
+            ${{ github.event.pull_request.draft && 'Status: ⏳ Draft' || 'Status: ✅ Ready for Review' }}
+
+            [View Pull Request](${{ github.event.pull_request.html_url }})
+          parse_mode: 'Markdown'
