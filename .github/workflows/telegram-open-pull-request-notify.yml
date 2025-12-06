@@ -43,11 +43,13 @@ jobs:
             CREATED_DATE="N/A"
           fi
 
-          # Escape HTML special characters
-          PULL_REQUEST_TITLE_ESC=$(echo "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-          PULL_REQUEST_BODY_ESC=$(echo "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
-          REPO_ESC=$(echo "$REPO" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-          AUTHOR_ESC=$(echo "$AUTHOR" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+          # Escape HTML special characters for Telegram HTML format
+          # In Telegram HTML: & < > must be escaped in text content
+          # Escape & first to avoid double escaping
+          PULL_REQUEST_TITLE_ESC=$(printf '%s' "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          PULL_REQUEST_BODY_ESC=$(printf '%s' "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' | head -c 1000)
+          REPO_ESC=$(printf '%s' "$REPO" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          AUTHOR_ESC=$(printf '%s' "$AUTHOR" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
 
           # Build message with improved HTML formatting
           MESSAGE="Open PR <b><code>${REPO_ESC}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'

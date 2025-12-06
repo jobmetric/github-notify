@@ -23,21 +23,26 @@ runs:
     - name: Send Telegram message
       shell: bash
       run: |
-        curl -sS -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${{ inputs.bot_token }}/sendMessage" \
+        # Store message in variable with proper escaping
+        MESSAGE="${{ inputs.message }}"
+        
+        # Send message using curl with proper encoding
+        RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${{ inputs.bot_token }}/sendMessage" \
           -d "chat_id=${{ inputs.chat_id }}" \
-          --data-urlencode "text=${{ inputs.message }}" \
+          --data-urlencode "text=$MESSAGE" \
           -d "parse_mode=${{ inputs.parse_mode }}" \
-          -d "disable_web_page_preview=true" | {
-          RESPONSE=$(cat)
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ Telegram message sent successfully"
-            echo "Response: $BODY"
-          else
-            echo "❌ Failed to send Telegram message"
-            echo "HTTP Code: $HTTP_CODE"
-            echo "Response: $BODY"
-            exit 1
-          fi
-        }
+          -d "disable_web_page_preview=true")
+        
+        # Parse response
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+        
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Telegram message sent successfully"
+          echo "Response: $BODY"
+        else
+          echo "❌ Failed to send Telegram message"
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Response: $BODY"
+          exit 1
+        fi
