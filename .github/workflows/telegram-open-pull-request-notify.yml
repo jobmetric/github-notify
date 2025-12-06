@@ -65,7 +65,6 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send Telegram notification for opened PR
-        if: steps.prepare_message.outcome == 'success'
         uses: jobmetric/github-notify/telegram@master
         with:
           bot_token: ${{ secrets.bot_token }}
