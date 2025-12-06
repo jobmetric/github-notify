@@ -44,7 +44,7 @@ jobs:
           fi
 
           # Escape HTML special characters for Telegram HTML format
-          # In Telegram HTML: & < > must be escaped in text content
+          # In Telegram HTML: & < > must be escaped in text content (not in tags)
           # Escape & first to avoid double escaping
           PULL_REQUEST_TITLE_ESC=$(printf '%s' "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
           PULL_REQUEST_BODY_ESC=$(printf '%s' "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' | head -c 1000)
@@ -52,6 +52,7 @@ jobs:
           AUTHOR_ESC=$(printf '%s' "$AUTHOR" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
 
           # Build message with improved HTML formatting
+          # Note: Telegram HTML requires proper escaping of special characters in text content
           MESSAGE="Open PR <b><code>${REPO_ESC}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PULL_REQUEST_TITLE_ESC}</b>"$'\n\n'
 
@@ -62,6 +63,11 @@ jobs:
           MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR_ESC}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${PULL_REQUEST_URL}\">View Pull Request on GitHub</a>"
+          
+          # Debug: Print message to see what we're sending
+          echo "Debug: Message prepared (first 200 chars):"
+          echo "$MESSAGE" | head -c 200
+          echo ""
 
           # Save message to output for next step
           echo "message<<EOF" >> $GITHUB_OUTPUT
