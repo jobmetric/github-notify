@@ -46,16 +46,18 @@ jobs:
           # Escape HTML special characters
           PULL_REQUEST_TITLE_ESC=$(echo "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
           PULL_REQUEST_BODY_ESC=$(echo "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
+          REPO_ESC=$(echo "$REPO" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+          AUTHOR_ESC=$(echo "$AUTHOR" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
 
           # Build message with improved HTML formatting
-          MESSAGE="Open PR <b><code>${REPO}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'
+          MESSAGE="Open PR <b><code>${REPO_ESC}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PULL_REQUEST_TITLE_ESC}</b>"$'\n\n'
 
           if [ -n "$PULL_REQUEST_BODY_ESC" ] && [ "$PULL_REQUEST_BODY_ESC" != "null" ]; then
-            MESSAGE="${MESSAGE}"$"<b>${PULL_REQUEST_BODY_ESC}</b> "$'\n\n'
+            MESSAGE="${MESSAGE}<b>${PULL_REQUEST_BODY_ESC}</b>"$'\n\n'
           fi
 
-          MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR_ESC}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${PULL_REQUEST_URL}\">View Pull Request on GitHub</a>"
 
