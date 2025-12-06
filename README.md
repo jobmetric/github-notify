@@ -215,27 +215,26 @@ Create a workflow file in your repository at `.github/workflows/notify-pr.yml`:
 name: Notify PR via Telegram
 
 on:
-  pull_request:
-    types: [opened, reopened, ready_for_review]
+  pull_request_target:
+    types:
+      - opened
 
 jobs:
   notify:
-    uses: jobmetric/github-notify/.github/workflows/telegram-pull-request-notify.yml@v1
-    with:
-      chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+    uses: jobmetric/github-notify/.github/workflows/telegram-open-pull-request-notify.yml@master
     secrets:
       bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
 ```
 
 That's it! 🎉 This workflow will automatically send beautifully formatted notifications to your Telegram whenever:
 - A pull request is opened
-- A pull request is reopened
-- A pull request is marked as ready for review
 
 The notification includes:
 - PR title and author
-- Repository and branch information
-- Draft status indicator
+- Repository and PR number
+- PR description (body)
+- Creation time
 - Direct link to the pull request
 
 ### **How to Use Reusable Workflows**
@@ -254,22 +253,10 @@ The notification includes:
 4. **Commit the file** - GitHub Actions will automatically detect and run it
 
 **Important Notes:**
-- Use the version tag (e.g., `@v1`) for stability, or `@main` for the latest version
-- The `chat_id` is passed as an input (can be a secret reference like `${{ secrets.TELEGRAM_CHAT_ID }}`)
-- The `bot_token` must be passed as a secret (never hardcode it!)
-- You can customize which events trigger the workflow (e.g., only on `opened` or also on `closed`, `merged`, etc.)
-
-**Example: Customizing Events**
-
-You can customize when notifications are sent by modifying the `types` array:
-
-```yaml
-on:
-  pull_request:
-    types: [opened, reopened, ready_for_review, closed, merged]
-```
-
-This will send notifications for all these PR events.
+- Use the version tag (e.g., `@master`) for the latest version
+- Both `bot_token` and `chat_id` must be passed as secrets (never hardcode them!)
+- The workflow uses `pull_request_target` event type to ensure it has access to the repository secrets
+- Currently supports `opened` event type for pull requests
 
 ### **More Reusable Workflows Coming Soon**
 
@@ -281,181 +268,6 @@ We're working on more pre-built workflows for:
 - And more!
 
 ---
-
-## 📝 **Advanced Usage: Using the Action Directly**
-
-If you need more control over the message format or want to create custom notifications, you can use the Telegram action directly in your workflows.
-
-### Basic Usage
-
-Create a workflow file in your repository at `.github/workflows/notify.yml`:
-
-```yaml
-name: Notify on Push
-
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    types: [ opened, closed, merged ]
-
-jobs:
-  notify:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Send Telegram notification
-        uses: jobmetric/github-notify/telegram@main
-        with:
-          bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
-          message: |
-            🚀 New push to {{ repository.name }}
-            
-            Branch: {{ github.ref_name }}
-            Author: {{ github.actor }}
-            Commit: {{ github.sha }}
-          parse_mode: 'Markdown'
-```
-
-### Advanced Usage Examples
-
-#### Example 1: Notify on Release
-
-```yaml
-name: Notify on Release
-
-on:
-  release:
-    types: [ published ]
-
-jobs:
-  notify-release:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send release notification
-        uses: jobmetric/github-notify/telegram@main
-        with:
-          bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
-          message: |
-            🎉 New Release Published!
-            
-            **{{ repository.name }}** v{{ github.event.release.tag_name }}
-            
-            {{ github.event.release.body }}
-            
-            [View Release]({{ github.event.release.html_url }})
-          parse_mode: 'Markdown'
-```
-
-#### Example 2: Notify on CI/CD Status
-
-```yaml
-name: CI/CD Notifications
-
-on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
-
-jobs:
-  notify-ci:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send CI status
-        uses: jobmetric/github-notify/telegram@main
-        with:
-          bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
-          message: |
-            {{ workflow_run.conclusion == 'success' && '✅' || '❌' }} CI/CD {{ workflow_run.conclusion }}
-            
-            Workflow: {{ workflow_run.name }}
-            Repository: {{ repository.name }}
-            Branch: {{ workflow_run.head_branch }}
-            
-            [View Workflow Run]({{ workflow_run.html_url }})
-          parse_mode: 'Markdown'
-```
-
-#### Example 3: Custom Message with HTML Formatting
-
-```yaml
-name: Custom Notification
-
-on:
-  pull_request:
-    types: [ opened, closed ]
-
-jobs:
-  notify-pr:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send PR notification
-        uses: jobmetric/github-notify/telegram@main
-        with:
-          bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
-          message: |
-            <b>Pull Request {{ github.event.action }}</b>
-            
-            <i>{{ github.event.pull_request.title }}</i>
-            
-            Author: <code>{{ github.event.pull_request.user.login }}</code>
-            Repository: <code>{{ repository.name }}</code>
-            
-            <a href="{{ github.event.pull_request.html_url }}">View PR</a>
-          parse_mode: 'HTML'
-```
-
-### Action Inputs
-
-The Telegram action accepts the following inputs:
-
-| Input | Required | Description | Default |
-|-------|----------|-------------|---------|
-| `bot_token` | Yes | Telegram bot token from BotFather | - |
-| `chat_id` | Yes | Target Telegram chat ID (user, group, or channel) | - |
-| `message` | Yes | Message text to send | - |
-| `parse_mode` | No | Telegram parse mode: `Markdown`, `HTML`, or `MarkdownV2` | `Markdown` |
-
-### Parse Modes
-
-Telegram supports different parse modes for formatting messages:
-
-- **Markdown**: Basic Markdown formatting (legacy)
-  ```markdown
-  *bold* _italic_ `code` [link](url)
-  ```
-
-- **HTML**: HTML tags for formatting
-  ```html
-  <b>bold</b> <i>italic</i> <code>code</code> <a href="url">link</a>
-  ```
-
-- **MarkdownV2**: Enhanced Markdown with better escaping
-  ```markdown
-  *bold* _italic_ `code` [link](url)
-  ```
-
-### Using GitHub Context Variables
-
-You can use GitHub's context variables in your messages to include dynamic information:
-
-- `{{ github.repository }}` - Repository name (e.g., `owner/repo`)
-- `{{ github.ref_name }}` - Branch or tag name
-- `{{ github.sha }}` - Commit SHA
-- `{{ github.actor }}` - Username of the person who triggered the workflow
-- `{{ github.event.* }}` - Event-specific data (varies by event type)
-- `{{ github.workflow }}` - Workflow name
-- `{{ github.run_id }}` - Unique run ID
-- `{{ github.run_number }}` - Run number for this workflow
-
-For more context variables, see the [GitHub Actions documentation](https://docs.github.com/en/actions/learn-github-actions/contexts).
 
 ---
 
