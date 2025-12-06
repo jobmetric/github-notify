@@ -14,10 +14,18 @@ jobs:
   notify-pr:
     runs-on: ubuntu-latest
     steps:
-      - name: Prepare Telegram message
-        id: prepare_message
+      - name: Send Telegram notification for opened PR
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
+          TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
         shell: bash
         run: |
+          # Skip if credentials not set
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram credentials not set. Skipping Pull Request notification."
+            exit 0
+          fi
+
           # Get Pull Request details
           PULL_REQUEST_TITLE="${{ github.event.pull_request.title }}"
           PULL_REQUEST_BODY="${{ github.event.pull_request.body }}"
@@ -50,15 +58,23 @@ jobs:
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${PULL_REQUEST_URL}\">View Pull Request on GitHub</a>"
 
-          # Save message to output for next step
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          echo "$MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Send message to Telegram and capture response
+          echo "Sending notification to Telegram..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TELEGRAM_CHAT_ID" \
+            --data-urlencode "text=$MESSAGE" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true)
 
-      - name: Send Telegram notification for opened PR
-        uses: jobmetric/github-notify/telegram@master
-        with:
-          bot_token: ${{ secrets.bot_token }}
-          chat_id: ${{ secrets.chat_id }}
-          message: ${{ steps.prepare_message.outputs.message }}
-          parse_mode: 'HTML'
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Telegram pull request notification sent successfully"
+            echo "Response: $BODY"
+          else
+            echo "❌ Failed to send Telegram notification"
+            echo "HTTP Code: $HTTP_CODE"
+            echo "Response: $BODY"
+            exit 1
+          fi
