@@ -25,7 +25,7 @@ runs:
       run: |
         # Create a temporary file for the message to handle multiline content properly
         MESSAGE_FILE=$(mktemp)
-        printf '%s' "${{ inputs.message }}" > "$MESSAGE_FILE"
+        printf '%b' "${{ inputs.message }}" > "$MESSAGE_FILE"
         
         # Send message using curl with --data-urlencode from file
         # This ensures proper encoding of special characters and multiline content

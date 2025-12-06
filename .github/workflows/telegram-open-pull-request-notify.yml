@@ -44,15 +44,17 @@ jobs:
           fi
 
           # Escape HTML special characters (only for title and body, as in original code)
+          # Important: Escape & first to avoid double escaping
           PULL_REQUEST_TITLE_ESC=$(echo "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
           PULL_REQUEST_BODY_ESC=$(echo "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
 
           # Build message with improved HTML formatting (exactly as in original code)
+          # Note: In Telegram HTML, only text content needs escaping, not tags
           MESSAGE="Open PR <b><code>${REPO}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PULL_REQUEST_TITLE_ESC}</b>"$'\n\n'
 
           if [ -n "$PULL_REQUEST_BODY_ESC" ] && [ "$PULL_REQUEST_BODY_ESC" != "null" ]; then
-            MESSAGE="${MESSAGE}<b>${PULL_REQUEST_BODY_ESC}</b> "$'\n\n'
+            MESSAGE="${MESSAGE}<b>${PULL_REQUEST_BODY_ESC}</b>"$'\n\n'
           fi
 
           MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
