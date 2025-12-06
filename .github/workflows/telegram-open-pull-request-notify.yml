@@ -43,31 +43,20 @@ jobs:
             CREATED_DATE="N/A"
           fi
 
-          # Escape HTML special characters for Telegram HTML format
-          # In Telegram HTML: & < > must be escaped in text content (not in tags)
-          # Important: Escape & first to avoid double escaping
-          escape_html() {
-            printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'
-          }
-          
-          PULL_REQUEST_TITLE_ESC=$(escape_html "$PULL_REQUEST_TITLE")
-          PULL_REQUEST_BODY_ESC=$(escape_html "$PULL_REQUEST_BODY" | head -c 1000)
-          REPO_ESC=$(escape_html "$REPO")
-          AUTHOR_ESC=$(escape_html "$AUTHOR")
-          CREATED_DATE_ESC=$(escape_html "$CREATED_DATE")
-          PULL_REQUEST_NUMBER_ESC=$(escape_html "$PULL_REQUEST_NUMBER")
+          # Escape HTML special characters (only for title and body, as in original working code)
+          PULL_REQUEST_TITLE_ESC=$(echo "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+          PULL_REQUEST_BODY_ESC=$(echo "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
 
-          # Build message with proper HTML formatting
-          # All text content must be escaped, only HTML tags remain unescaped
-          MESSAGE="Open PR <b><code>${REPO_ESC}</code> #${PULL_REQUEST_NUMBER_ESC}</b>"$'\n\n'
+          # Build message with improved HTML formatting (exactly as in original working code)
+          MESSAGE="Open PR <b><code>${REPO}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PULL_REQUEST_TITLE_ESC}</b>"$'\n\n'
 
           if [ -n "$PULL_REQUEST_BODY_ESC" ] && [ "$PULL_REQUEST_BODY_ESC" != "null" ]; then
-            MESSAGE="${MESSAGE}<b>${PULL_REQUEST_BODY_ESC}</b>"$'\n\n'
+            MESSAGE="${MESSAGE}<b>${PULL_REQUEST_BODY_ESC}</b> "$'\n\n'
           fi
 
-          MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR_ESC}</code></b>"$'\n'
-          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE_ESC}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${PULL_REQUEST_URL}\">View Pull Request on GitHub</a>"
 
           # Save message to output for next step

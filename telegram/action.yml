@@ -23,21 +23,15 @@ runs:
     - name: Send Telegram message
       shell: bash
       run: |
-        # Create a temporary file for the message to handle multiline content properly
-        MESSAGE_FILE=$(mktemp)
-        # Use printf with %s to preserve all characters exactly as they are
-        printf '%s' "${{ inputs.message }}" > "$MESSAGE_FILE"
+        # Store message in variable (exactly as in original working code)
+        MESSAGE="${{ inputs.message }}"
         
-        # Send message using curl with --data-urlencode from file
-        # This ensures proper encoding of special characters and multiline content
-        RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${{ inputs.bot_token }}/sendMessage" \
-          -d "chat_id=${{ inputs.chat_id }}" \
-          --data-urlencode "text@$MESSAGE_FILE" \
-          -d "parse_mode=${{ inputs.parse_mode }}" \
-          -d "disable_web_page_preview=true")
-        
-        # Clean up temp file
-        rm -f "$MESSAGE_FILE"
+        # Send message using curl with --data-urlencode (exactly as in original working code)
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${{ inputs.bot_token }}/sendMessage" \
+          -d chat_id="${{ inputs.chat_id }}" \
+          --data-urlencode "text=$MESSAGE" \
+          -d parse_mode="${{ inputs.parse_mode }}" \
+          -d disable_web_page_preview=true)
         
         # Parse response
         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
