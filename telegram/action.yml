@@ -23,14 +23,13 @@ runs:
     - name: Send Telegram message
       shell: bash
       run: |
-        # Store message in variable
+        # Store message in variable (exactly as in original working code)
         MESSAGE="${{ inputs.message }}"
         
-        # Send message using curl with --data-urlencode
-        # Use printf to properly handle multiline content
-        RESPONSE=$(printf '%s' "$MESSAGE" | curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${{ inputs.bot_token }}/sendMessage" \
+        # Send message using curl with --data-urlencode (exactly as in original working code)
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${{ inputs.bot_token }}/sendMessage" \
           -d chat_id="${{ inputs.chat_id }}" \
-          --data-urlencode "text@-" \
+          --data-urlencode "text=$MESSAGE" \
           -d parse_mode="${{ inputs.parse_mode }}" \
           -d disable_web_page_preview=true)
         
