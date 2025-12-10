@@ -2,6 +2,10 @@ name: Telegram Issue Reply Notify
 
 on:
   workflow_call:
+    inputs:
+      date_format:
+        description: "Date format: 'jalali' for Persian calendar, 'both' for both calendars, or leave empty for default Gregorian"
+        required: false
     secrets:
       bot_token:
         description: "Telegram bot token created via BotFather"
@@ -14,10 +18,15 @@ jobs:
   notify-reply-issue:
     runs-on: ubuntu-latest
     steps:
+      - name: Install jdatetime for Persian date conversion
+        if: inputs.date_format == 'jalali' || inputs.date_format == 'both'
+        run: pip3 install jdatetime 2>/dev/null || true
+
       - name: Send Telegram notification for issue comment
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
           TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
+          DATE_FORMAT: ${{ inputs.date_format }}
         shell: bash
         run: |
           # Skip if credentials not set
@@ -39,24 +48,37 @@ jobs:
           # Format date (convert ISO 8601 to readable format)
           if [ -n "$CREATED_AT" ]; then
             CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CREATED_AT")
+            
+            # Convert to Jalali if date_format is set
+            if [ "$DATE_FORMAT" = "jalali" ] || [ "$DATE_FORMAT" = "both" ]; then
+              CREATED_DATE_JALALI=$(python3 -c "from datetime import datetime; import jdatetime; exec(\"try:\\n    dt_str = '$CREATED_AT'.replace('Z', '+00:00')\\n    try:\\n        dt = datetime.fromisoformat(dt_str)\\n    except:\\n        dt = datetime.strptime('$CREATED_AT', '%Y-%m-%dT%H:%M:%SZ')\\n    jd = jdatetime.datetime.fromgregorian(datetime=dt.replace(tzinfo=None))\\n    print(f'{jd.year}-{jd.month:02d}-{jd.day:02d} {jd.hour:02d}:{jd.minute:02d}:{jd.second:02d} (شمسی)')\\nexcept:\\n    pass\")" 2>/dev/null || echo "")
+              
+              if [ -n "$CREATED_DATE_JALALI" ] && [ "$CREATED_DATE_JALALI" != "" ]; then
+                if [ "$DATE_FORMAT" = "jalali" ]; then
+                  CREATED_DATE="$CREATED_DATE_JALALI"
+                else
+                  CREATED_DATE="${CREATED_DATE} / ${CREATED_DATE_JALALI}"
+                fi
+              fi
+            fi
           else
             CREATED_DATE="N/A"
           fi
 
-          # Escape HTML special characters (only for title and body, as in original working code)
+          # Escape HTML special characters
           ISSUE_TITLE_ESC=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
           COMMENT_BODY_ESC=$(echo "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
 
-          # Build message with improved HTML formatting (exactly as in original working code)
+          # Build message with improved HTML formatting
           MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
-          MESSAGE="${MESSAGE}<b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
-          MESSAGE="${MESSAGE}Commented by: <b><code>${AUTHOR}</code></b>"$'\n'
-          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}Title issue: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
 
-          if [ -n "$COMMENT_BODY_ESC" ] && [ "$COMMENT_BODY_ESC" != "null" ]; then
-            MESSAGE="${MESSAGE}${COMMENT_BODY_ESC}"$'\n\n'
+          if [ -n "$COMMENT_BODY_ESC" ] && [ "$COMMENT_BODY_ESC" != "null" ] && [ "$COMMENT_BODY_ESC" != "" ]; then
+            MESSAGE="${MESSAGE}Comment issue: ${COMMENT_BODY_ESC}"$'\n\n'
           fi
 
+          MESSAGE="${MESSAGE}Commented by: <b><code>${AUTHOR}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue on GitHub</a>"$'\n'
           MESSAGE="${MESSAGE}<a href=\"${COMMENT_URL}\">View Comment on GitHub</a>"
 
