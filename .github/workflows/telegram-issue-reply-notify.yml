@@ -48,15 +48,15 @@ jobs:
           COMMENT_BODY_ESC=$(echo "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
 
           # Build message with improved HTML formatting (exactly as in original working code)
-          MESSAGE="Reply to issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
+          MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}Commented by: <b><code>${AUTHOR}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
 
           if [ -n "$COMMENT_BODY_ESC" ] && [ "$COMMENT_BODY_ESC" != "null" ]; then
             MESSAGE="${MESSAGE}${COMMENT_BODY_ESC}"$'\n\n'
           fi
 
-          MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
-          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${COMMENT_URL}\">View Comment on GitHub</a>"
 
           # Send message to Telegram and capture response
