@@ -6,6 +6,7 @@ on:
       date_format:
         description: "Date format: 'jalali' for Persian calendar, 'both' for both calendars, or leave empty for default Gregorian"
         required: false
+        type: string 
     secrets:
       bot_token:
         description: "Telegram bot token created via BotFather"
