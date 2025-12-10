@@ -35,6 +35,13 @@ jobs:
             exit 0
           fi
 
+          # Debug: Print event structure
+          echo "=== Debug: Event Structure ==="
+          echo "Event action: ${{ github.event.action }}"
+          echo "Issue number: ${{ github.event.issue.number }}"
+          echo "Comment ID: ${{ github.event.comment.id }}"
+          echo "==============================="
+
           # Get Issue Comment details
           COMMENT_BODY="${{ github.event.comment.body }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
@@ -44,6 +51,15 @@ jobs:
           REPO="${{ github.repository }}"
           AUTHOR="${{ github.event.comment.user.login }}"
           CREATED_AT="${{ github.event.comment.created_at }}"
+
+          # Debug: Check if variables are set
+          echo "=== Debug: Variables ==="
+          echo "COMMENT_BODY length: ${#COMMENT_BODY}"
+          echo "ISSUE_TITLE: $ISSUE_TITLE"
+          echo "ISSUE_NUMBER: $ISSUE_NUMBER"
+          echo "AUTHOR: $AUTHOR"
+          echo "CREATED_AT: $CREATED_AT"
+          echo "========================="
 
           # Format date (convert ISO 8601 to readable format)
           if [ -n "$CREATED_AT" ]; then
