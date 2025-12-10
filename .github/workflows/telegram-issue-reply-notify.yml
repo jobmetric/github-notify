@@ -27,14 +27,14 @@ jobs:
           fi
 
           # Get Issue Comment details
-          COMMENT_BODY="${{ github.event.issue_comment.body }}"
-          ISSUE_TITLE="${{ github.event.issue_comment.issue.title }}"
-          ISSUE_NUMBER="${{ github.event.issue_comment.issue.number }}"
-          ISSUE_URL="${{ github.event.issue_comment.issue.html_url }}"
-          COMMENT_URL="${{ github.event.issue_comment.html_url }}"
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          ISSUE_URL="${{ github.event.issue.html_url }}"
+          COMMENT_URL="${{ github.event.comment.html_url }}"
           REPO="${{ github.repository }}"
-          AUTHOR="${{ github.event.issue_comment.user.login }}"
-          CREATED_AT="${{ github.event.issue_comment.created_at }}"
+          AUTHOR="${{ github.event.comment.user.login }}"
+          CREATED_AT="${{ github.event.comment.created_at }}"
 
           # Format date (convert ISO 8601 to readable format)
           if [ -n "$CREATED_AT" ]; then
@@ -57,6 +57,7 @@ jobs:
             MESSAGE="${MESSAGE}${COMMENT_BODY_ESC}"$'\n\n'
           fi
 
+          MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue on GitHub</a>"$'\n'
           MESSAGE="${MESSAGE}<a href=\"${COMMENT_URL}\">View Comment on GitHub</a>"
 
           # Send message to Telegram and capture response
