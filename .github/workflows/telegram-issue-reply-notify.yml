@@ -51,7 +51,7 @@ jobs:
             
             # Convert to Jalali if date_format is set
             if [ "$DATE_FORMAT" = "jalali" ] || [ "$DATE_FORMAT" = "both" ]; then
-              CREATED_DATE_JALALI=$(python3 -c "from datetime import datetime; import jdatetime; exec(\"try:\\n    dt_str = '$CREATED_AT'.replace('Z', '+00:00')\\n    try:\\n        dt = datetime.fromisoformat(dt_str)\\n    except:\\n        dt = datetime.strptime('$CREATED_AT', '%Y-%m-%dT%H:%M:%SZ')\\n    jd = jdatetime.datetime.fromgregorian(datetime=dt.replace(tzinfo=None))\\n    print(f'{jd.year}-{jd.month:02d}-{jd.day:02d} {jd.hour:02d}:{jd.minute:02d}:{jd.second:02d} (شمسی)')\\nexcept:\\n    pass\")" 2>/dev/null || echo "")
+              CREATED_DATE_JALALI=$(python3 -c "from datetime import datetime; import jdatetime; exec('try:\n    dt_str = \"$CREATED_AT\".replace(\"Z\", \"+00:00\")\n    try:\n        dt = datetime.fromisoformat(dt_str)\n    except:\n        dt = datetime.strptime(\"$CREATED_AT\", \"%Y-%m-%dT%H:%M:%SZ\")\n    jd = jdatetime.datetime.fromgregorian(datetime=dt.replace(tzinfo=None))\n    print(f\"{jd.year}-{jd.month:02d}-{jd.day:02d} {jd.hour:02d}:{jd.minute:02d}:{jd.second:02d} (شمسی)\")\nexcept:\n    pass')" 2>/dev/null || echo "")
               
               if [ -n "$CREATED_DATE_JALALI" ] && [ "$CREATED_DATE_JALALI" != "" ]; then
                 if [ "$DATE_FORMAT" = "jalali" ]; then
