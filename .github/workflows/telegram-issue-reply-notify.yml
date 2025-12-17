@@ -4,9 +4,14 @@ on:
   workflow_call:
     inputs:
       date_format:
-        description: "Date format: 'jalali' for Persian calendar, 'both' for both calendars, or leave empty for default Gregorian"
+        description: "Date format: 'jalali' (Persian), 'hijri' (Islamic), 'hebrew', 'buddhist', 'coptic', 'ethiopian', 'chinese', 'both' (Gregorian + selected), or leave empty for default Gregorian"
         required: false
-        type: string 
+        type: string
+      calendar_type:
+        description: "Calendar type for conversion: 'jalali', 'hijri', 'hebrew', 'buddhist', 'coptic', 'ethiopian', 'chinese' (used when date_format is 'both')"
+        required: false
+        type: string
+        default: "jalali" 
     secrets:
       bot_token:
         description: "Telegram bot token created via BotFather"
@@ -19,15 +24,88 @@ jobs:
   notify-reply-issue:
     runs-on: ubuntu-latest
     steps:
-      - name: Install jdatetime for Persian date conversion
-        if: inputs.date_format == 'jalali' || inputs.date_format == 'both'
-        run: pip3 install jdatetime 2>/dev/null || true
+      - name: Checkout repository
+        if: inputs.date_format != '' && inputs.date_format != null
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        if: inputs.date_format != '' && inputs.date_format != null
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: intl
+
+      - name: Install Composer dependencies
+        if: inputs.date_format != '' && inputs.date_format != null
+        run: |
+          echo "=== Checking Composer ==="
+          if ! command -v composer &> /dev/null; then
+            echo "⚠️  Composer is not installed. Installing..."
+            curl -sS https://getcomposer.org/installer | php
+            sudo mv composer.phar /usr/local/bin/composer
+            chmod +x /usr/local/bin/composer
+          fi
+          
+          if command -v composer &> /dev/null; then
+            echo "✅ Composer version: $(composer --version)"
+          else
+            echo "❌ Failed to install Composer"
+            exit 1
+          fi
+          
+          echo ""
+          echo "=== Checking composer.json ==="
+          if [ -f "composer.json" ]; then
+            echo "✅ composer.json found"
+            echo "📄 composer.json content:"
+            cat composer.json | head -20
+          else
+            echo "⚠️  composer.json not found. Skipping dependency installation."
+            exit 0
+          fi
+          
+          echo ""
+          echo "=== Installing dependencies ==="
+          if composer install --no-dev --no-interaction --prefer-dist 2>&1; then
+            echo "✅ Dependencies installed successfully"
+          else
+            echo "❌ Failed to install dependencies"
+            echo "⚠️  Continuing without dependencies (date conversion may not work)"
+          fi
+          
+          echo ""
+          echo "=== Checking MultiCalendar package ==="
+          if [ -d "vendor/jobmetric/multi-calendar" ]; then
+            echo "✅ MultiCalendar package found"
+            PACKAGE_DIR="vendor/jobmetric/multi-calendar"
+            
+            # Check for script in common locations
+            SCRIPT_FOUND=false
+            for script_path in "bin/convert-date.sh" "scripts/convert-date.sh" ".github/scripts/convert-date.sh"; do
+              if [ -f "$PACKAGE_DIR/$script_path" ]; then
+                echo "✅ Script found at: $PACKAGE_DIR/$script_path"
+                SCRIPT_FOUND=true
+                break
+              fi
+            done
+            
+            if [ "$SCRIPT_FOUND" = false ]; then
+              echo "⚠️  convert-date.sh script not found in package"
+              echo "📁 Package directory contents:"
+              ls -la "$PACKAGE_DIR" | head -10
+            fi
+          else
+            echo "⚠️  MultiCalendar package not found in vendor/"
+            echo "📁 Vendor directory contents:"
+            ls -la vendor/ 2>/dev/null | head -10 || echo "vendor/ directory does not exist"
+          fi
 
       - name: Send Telegram notification for issue comment
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
           TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
           DATE_FORMAT: ${{ inputs.date_format }}
+          CALENDAR_TYPE: ${{ inputs.calendar_type }}
         shell: bash
         run: |
           # Skip if credentials not set
@@ -66,15 +144,80 @@ jobs:
           if [ -n "$CREATED_AT" ]; then
             CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CREATED_AT")
             
-            # Convert to Jalali if date_format is set
-            if [ "$DATE_FORMAT" = "jalali" ] || [ "$DATE_FORMAT" = "both" ]; then
-              CREATED_DATE_JALALI=$(python3 -c "from datetime import datetime; import jdatetime; exec('try:\n    dt_str = \"$CREATED_AT\".replace(\"Z\", \"+00:00\")\n    try:\n        dt = datetime.fromisoformat(dt_str)\n    except:\n        dt = datetime.strptime(\"$CREATED_AT\", \"%Y-%m-%dT%H:%M:%SZ\")\n    jd = jdatetime.datetime.fromgregorian(datetime=dt.replace(tzinfo=None))\n    print(f\"{jd.year}-{jd.month:02d}-{jd.day:02d} {jd.hour:02d}:{jd.minute:02d}:{jd.second:02d} (شمسی)\")\nexcept:\n    pass')" 2>/dev/null || echo "")
+            # Convert date if date_format is set
+            if [ -n "$DATE_FORMAT" ] && [ "$DATE_FORMAT" != "" ]; then
+              echo ""
+              echo "=== Converting date ==="
+              echo "📅 Original date: $CREATED_AT"
+              echo "📆 Date format: $DATE_FORMAT"
               
-              if [ -n "$CREATED_DATE_JALALI" ] && [ "$CREATED_DATE_JALALI" != "" ]; then
-                if [ "$DATE_FORMAT" = "jalali" ]; then
-                  CREATED_DATE="$CREATED_DATE_JALALI"
+              # Determine calendar type
+              CALENDAR_TYPE_TO_USE="jalali"
+              if [ "$DATE_FORMAT" = "both" ]; then
+                CALENDAR_TYPE_TO_USE="${CALENDAR_TYPE:-jalali}"
+                echo "📅 Calendar type: $CALENDAR_TYPE_TO_USE"
+              elif [ "$DATE_FORMAT" != "both" ]; then
+                CALENDAR_TYPE_TO_USE="$DATE_FORMAT"
+                echo "📅 Calendar type: $CALENDAR_TYPE_TO_USE"
+              fi
+              
+              # Check PHP availability
+              if ! command -v php &> /dev/null; then
+                echo "❌ PHP is not installed or not in PATH"
+                CREATED_DATE_CONVERTED=""
+              else
+                echo "✅ PHP version: $(php -v | head -1)"
+                
+                # Try to find convert-date.sh script in MultiCalendar package
+                SCRIPT_PATH=""
+                POSSIBLE_PATHS=(
+                  "vendor/jobmetric/multi-calendar/bin/convert-date.sh"
+                  "vendor/jobmetric/multi-calendar/scripts/convert-date.sh"
+                  "vendor/jobmetric/multi-calendar/.github/scripts/convert-date.sh"
+                )
+                
+                echo "🔍 Searching for convert-date.sh script..."
+                for path in "${POSSIBLE_PATHS[@]}"; do
+                  if [ -f "$path" ]; then
+                    SCRIPT_PATH="$path"
+                    echo "✅ Script found at: $path"
+                    break
+                  else
+                    echo "  ⚠️  Not found: $path"
+                  fi
+                done
+                
+                if [ -n "$SCRIPT_PATH" ]; then
+                  chmod +x "$SCRIPT_PATH" 2>/dev/null || true
+                  echo "🔄 Converting date to $CALENDAR_TYPE_TO_USE..."
+                  CREATED_DATE_CONVERTED=$("$SCRIPT_PATH" "$CREATED_AT" "$CALENDAR_TYPE_TO_USE" "Y-m-d H:i:s" 2>&1)
+                  
+                  if [ -n "$CREATED_DATE_CONVERTED" ] && [ "$CREATED_DATE_CONVERTED" != "" ] && [[ ! "$CREATED_DATE_CONVERTED" =~ ^Error ]]; then
+                    echo "✅ Converted date: $CREATED_DATE_CONVERTED"
+                  else
+                    echo "❌ Date conversion failed: $CREATED_DATE_CONVERTED"
+                    CREATED_DATE_CONVERTED=""
+                  fi
                 else
-                  CREATED_DATE="${CREATED_DATE} / ${CREATED_DATE_JALALI}"
+                  echo "❌ convert-date.sh script not found in MultiCalendar package"
+                  echo "⚠️  Date conversion will be skipped"
+                  CREATED_DATE_CONVERTED=""
+                fi
+              fi
+              
+              if [ -n "$CREATED_DATE_CONVERTED" ] && [ "$CREATED_DATE_CONVERTED" != "" ]; then
+                if [ "$DATE_FORMAT" = "both" ]; then
+                  CREATED_DATE="${CREATED_DATE} / ${CREATED_DATE_CONVERTED}"
+                else
+                  CREATED_DATE="$CREATED_DATE_CONVERTED"
+                fi
+                echo "✅ Final date format: $CREATED_DATE"
+              else
+                if [ "$DATE_FORMAT" = "both" ]; then
+                  echo "⚠️  Using Gregorian date only (conversion failed)"
+                else
+                  echo "❌ Date conversion failed, using Gregorian date"
+                  CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CREATED_AT")
                 fi
               fi
             fi
