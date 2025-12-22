@@ -108,20 +108,10 @@ jobs:
           CALENDAR_TYPE: ${{ inputs.calendar_type }}
         shell: bash
         run: |
-          # Skip if credentials not set
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "Telegram credentials not set. Skipping Reply Issue notification."
             exit 0
           fi
 
-          # Debug: Print event structure
-          echo "=== Debug: Event Structure ==="
-          echo "Event action: ${{ github.event.action }}"
-          echo "Issue number: ${{ github.event.issue.number }}"
-          echo "Comment ID: ${{ github.event.comment.id }}"
-          echo "==============================="
-
-          # Get Issue Comment details
           COMMENT_BODY="${{ github.event.comment.body }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
           ISSUE_NUMBER="${{ github.event.issue.number }}"
@@ -229,7 +219,6 @@ jobs:
           ISSUE_TITLE_ESC=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
           COMMENT_BODY_ESC=$(echo "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
 
-          # Build message with improved HTML formatting
           MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}Title issue: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
 
