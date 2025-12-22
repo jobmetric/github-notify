@@ -112,6 +112,11 @@ jobs:
             exit 1
           fi
 
+          if [ -z "$AUTOLOAD_FILE" ]; then
+            echo "Error: vendor/autoload.php not found" >&2
+            exit 1
+          fi
+
           AUTOLOAD_FILE="$AUTOLOAD_FILE" \
           MC_DATE="$DATE" \
           MC_FROM="$FROM_CAL" \
@@ -119,17 +124,42 @@ jobs:
           MC_FMT_IN="$FMT_INPUT" \
           MC_FMT_OUT="$FMT_OUTPUT" \
           php -r '
-          require_once getenv("AUTOLOAD_FILE");
-          use JobMetric\MultiCalendar\Console\ConvertDateCommand;
+          $autoload = getenv("AUTOLOAD_FILE");
+          if (!$autoload || !file_exists($autoload)) {
+              fwrite(STDERR, "Error: Autoload file not found: " . ($autoload ?: "empty") . PHP_EOL);
+              exit(1);
+          }
+          require_once $autoload;
+          
           function env(string $k): ?string {
               $v = getenv($k);
               return ($v === false || $v === "") ? null : $v;
           }
+          
           try {
-              $cmd = new ConvertDateCommand();
-              echo $cmd->execute(env("MC_TO"), env("MC_FMT_OUT"), env("MC_DATE"), env("MC_FROM") ?? "gregorian", env("MC_FMT_IN")) . PHP_EOL;
+              if (!class_exists("JobMetric\\MultiCalendar\\Console\\ConvertDateCommand")) {
+                  fwrite(STDERR, "Error: ConvertDateCommand class not found" . PHP_EOL);
+                  exit(1);
+              }
+              
+              $cmd = new JobMetric\MultiCalendar\Console\ConvertDateCommand();
+              $result = $cmd->execute(
+                  env("MC_TO") ?: "gregorian",
+                  env("MC_FMT_OUT") ?: "Y-m-d",
+                  env("MC_DATE") ?: "",
+                  env("MC_FROM") ?: "gregorian",
+                  env("MC_FMT_IN")
+              );
+              
+              if (empty($result)) {
+                  fwrite(STDERR, "Error: Empty result from ConvertDateCommand" . PHP_EOL);
+                  exit(1);
+              }
+              
+              echo trim($result) . PHP_EOL;
           } catch (Throwable $e) {
-              fwrite(STDERR, $e->getMessage());
+              fwrite(STDERR, "Error: " . $e->getMessage() . PHP_EOL);
+              fwrite(STDERR, "File: " . $e->getFile() . ":" . $e->getLine() . PHP_EOL);
               exit(1);
           }
           '
@@ -175,9 +205,23 @@ jobs:
               echo "✅ Script found."
               chmod +x ./convert-date.sh 2>/dev/null || true
               
-              echo "🔄 Converting date..."
+            echo "🔄 Converting date..."
+            echo "📋 Command: ./convert-date.sh \"$CREATED_AT\" --to \"$TARGET_CAL\" --output-format \"Y-m-d H:i:s\""
+            
+            if [ ! -f "vendor/autoload.php" ]; then
+              echo "❌ vendor/autoload.php not found. Checking if MultiCalendar is installed..."
+              if [ -d "vendor/jobmetric/multi-calendar" ]; then
+                echo "⚠️  MultiCalendar directory exists but autoload.php is missing"
+              else
+                echo "❌ MultiCalendar package not found in vendor directory"
+              fi
+              echo "⚠️  Using Gregorian date only (autoload not found)"
+            else
               CONVERTED=$(./convert-date.sh "$CREATED_AT" --to "$TARGET_CAL" --output-format "Y-m-d H:i:s" 2>&1)
               CONVERT_EXIT_CODE=$?
+              
+              echo "📊 Exit code: $CONVERT_EXIT_CODE"
+              echo "📊 Output: $CONVERTED"
               
               if [ $CONVERT_EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
                 echo "✅ Converted date: $CONVERTED"
@@ -187,9 +231,11 @@ jobs:
                   CREATED_DATE="${CONVERTED} (${TARGET_CAL})"
                 fi
               else
-                echo "❌ Date conversion failed: $CONVERTED"
+                echo "❌ Date conversion failed"
+                echo "📋 Error details: $CONVERTED"
                 echo "⚠️  Using Gregorian date only (conversion failed)"
               fi
+            fi
             else
               echo "❌ convert-date.sh script not found"
               echo "⚠️  Date conversion will be skipped. Using Gregorian date only."
