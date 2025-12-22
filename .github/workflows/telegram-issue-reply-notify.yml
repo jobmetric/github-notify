@@ -54,121 +54,66 @@ jobs:
           fi
 
           echo ""
-          echo "=== Installing MultiCalendar package ==="
+          echo "=== Installing MultiCalendar package (latest version) ==="
           composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           
           if [ $? -eq 0 ]; then
-            echo "✅ MultiCalendar package installed successfully."
+            echo "✅ MultiCalendar package installed successfully"
             if [ -f "vendor/autoload.php" ]; then
-              echo "✅ Autoload file found at: vendor/autoload.php"
+              echo "✅ Autoload file found: vendor/autoload.php"
             else
-              echo "⚠️  Autoload file not found. Date conversion may fail."
+              echo "⚠️  Autoload file not found"
+            fi
+            if [ -d "vendor/jobmetric/multi-calendar" ]; then
+              echo "✅ Package directory exists: vendor/jobmetric/multi-calendar"
             fi
           else
-            echo "❌ Failed to install MultiCalendar package. Date conversion may fail."
-          fi
-
-      - name: Create Date Converter Script
-        if: inputs.date_format != '' && inputs.date_format != null
-        run: |
-          cat << 'EOF' > convert-date.sh
-          #!/bin/bash
-          DATE=""
-          FROM_CAL="gregorian"
-          TO_CAL="gregorian"
-          FMT_INPUT=""
-          FMT_OUTPUT="Y-m-d"
-
-          POSITIONAL=()
-          while [[ $# -gt 0 ]]; do
-            case "$1" in
-              -f|--from) FROM_CAL="${2:-}"; shift 2 ;;
-              --from=*) FROM_CAL="${1#*=}"; shift ;;
-              -t|--to) TO_CAL="${2:-}"; shift 2 ;;
-              --to=*) TO_CAL="${1#*=}"; shift ;;
-              -i|--input-format) FMT_INPUT="${2:-}"; shift 2 ;;
-              --input-format=*) FMT_INPUT="${1#*=}"; shift ;;
-              -o|--output-format) FMT_OUTPUT="${2:-}"; shift 2 ;;
-              --output-format=*) FMT_OUTPUT="${1#*=}"; shift ;;
-              *) POSITIONAL+=("$1"); shift ;;
-            esac
-          done
-          set -- "${POSITIONAL[@]}"
-          DATE="${1:-}"
-
-          AUTOLOAD_FILE=""
-          if [ -f "vendor/autoload.php" ]; then
-            AUTOLOAD_FILE="vendor/autoload.php"
-          fi
-          
-          if [ -z "$AUTOLOAD_FILE" ]; then
-             FIND_AUTOLOAD=$(find . -name "autoload.php" | grep "vendor/autoload.php" | head -n 1)
-             if [ -n "$FIND_AUTOLOAD" ]; then
-               AUTOLOAD_FILE="$FIND_AUTOLOAD"
-             fi
-          fi
-
-          if [ -z "$AUTOLOAD_FILE" ]; then
-            echo "Error: vendor/autoload.php not found" >&2
+            echo "❌ Failed to install MultiCalendar package"
             exit 1
           fi
+
+      - name: Setup Date Converter Script
+        if: inputs.date_format != '' && inputs.date_format != null
+        run: |
+          echo "=== Setting up convert-date.sh script ==="
           
-          AUTOLOAD_FILE="$AUTOLOAD_FILE" \
-          MC_DATE="$DATE" \
-          MC_FROM="$FROM_CAL" \
-          MC_TO="$TO_CAL" \
-          MC_FMT_IN="$FMT_INPUT" \
-          MC_FMT_OUT="$FMT_OUTPUT" \
-          php -r '
-          $autoload = getenv("AUTOLOAD_FILE");
-          if (!$autoload || !file_exists($autoload)) {
-              fwrite(STDERR, "Error: Autoload file not found: " . ($autoload ?: "empty") . PHP_EOL);
-              exit(1);
-          }
+          SCRIPT_PATH=""
+          POSSIBLE_PATHS=(
+            "vendor/jobmetric/multi-calendar/bin/convert-date.sh"
+            "vendor/jobmetric/multi-calendar/convert-date.sh"
+            "vendor/jobmetric/multi-calendar/.github/scripts/convert-date.sh"
+          )
           
-          require_once $autoload;
+          echo "🔍 Searching for script in package..."
+          for path in "${POSSIBLE_PATHS[@]}"; do
+            if [ -f "$path" ]; then
+              SCRIPT_PATH="$path"
+              echo "✅ Script found: $path"
+              break
+            fi
+          done
           
-          function env(string $k): ?string {
-              $v = getenv($k);
-              return ($v === false || $v === "") ? null : $v;
-          }
+          if [ -z "$SCRIPT_PATH" ]; then
+            echo "⚠️  Script not found in package"
+            echo "📥 Downloading from repository..."
+            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/master/bin/convert-date.sh -o convert-date.sh || \
+            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/main/bin/convert-date.sh -o convert-date.sh || {
+              echo "❌ Failed to download script"
+              exit 1
+            }
+            SCRIPT_PATH="convert-date.sh"
+            echo "✅ Script downloaded: $SCRIPT_PATH"
+          fi
           
-          try {
-              if (!class_exists("JobMetric\\MultiCalendar\\Console\\ConvertDateCommand")) {
-                  fwrite(STDERR, "Error: ConvertDateCommand class not found" . PHP_EOL);
-                  exit(1);
-              }
-              
-              $cmd = new JobMetric\MultiCalendar\Console\ConvertDateCommand();
-              
-              $toCal = env("MC_TO") ?: "gregorian";
-              $fmtOut = env("MC_FMT_OUT") ?: "Y-m-d";
-              $date = env("MC_DATE") ?: "";
-              $fromCal = env("MC_FROM") ?: "gregorian";
-              $fmtIn = env("MC_FMT_IN");
-              
-              fwrite(STDERR, "Calling execute with:" . PHP_EOL);
-              fwrite(STDERR, "  TO: $toCal" . PHP_EOL);
-              fwrite(STDERR, "  FMT_OUT: $fmtOut" . PHP_EOL);
-              fwrite(STDERR, "  DATE: $date" . PHP_EOL);
-              fwrite(STDERR, "  FROM: $fromCal" . PHP_EOL);
-              fwrite(STDERR, "  FMT_IN: " . ($fmtIn ?: "null") . PHP_EOL);
-              
-              $result = $cmd->execute($toCal, $fmtOut, $date, $fromCal, $fmtIn);
-              
-              if (empty($result)) {
-                  fwrite(STDERR, "Error: Empty result from ConvertDateCommand" . PHP_EOL);
-                  exit(1);
-              }
-              
-              echo trim($result) . PHP_EOL;
-          } catch (Throwable $e) {
-              fwrite(STDERR, "Error: " . $e->getMessage() . PHP_EOL);
-              exit(1);
-          }
-          '
-          EOF
-          chmod +x convert-date.sh
+          chmod +x "$SCRIPT_PATH"
+          echo "✅ Script is executable"
+          
+          if [ "$SCRIPT_PATH" != "convert-date.sh" ]; then
+            cp "$SCRIPT_PATH" convert-date.sh
+            echo "✅ Script copied to: convert-date.sh"
+          fi
+          
+          echo "✅ Date converter script ready"
 
       - name: Send Telegram notification for issue comment
         env:
@@ -191,10 +136,9 @@ jobs:
           AUTHOR="${{ github.event.comment.user.login }}"
           CREATED_AT="${{ github.event.comment.created_at }}"
           
-          CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CREATED_AT")
+          CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d" 2>/dev/null || echo "$CREATED_AT")
           
-          if [ -n "$DATE_FORMAT" ] && [ -f "./convert-date.sh" ]; then
-            echo ""
+          if [ -n "$DATE_FORMAT" ] && [ -f "./convert-date.sh" ] && [ -f "vendor/autoload.php" ]; then
             echo "=== Converting date ==="
             echo "📅 Original date: $CREATED_AT"
             
@@ -204,47 +148,25 @@ jobs:
             fi
             
             echo "🔄 Target calendar: $TARGET_CAL"
-            echo "🔍 Checking convert-date.sh script..."
-            if [ -f "./convert-date.sh" ]; then
-              echo "✅ Script found."
-              chmod +x ./convert-date.sh 2>/dev/null || true
-              
-            echo "🔄 Converting date..."
-            echo "📋 Command: ./convert-date.sh \"$CREATED_AT\" --to \"$TARGET_CAL\" --output-format \"Y-m-d H:i:s\""
+            echo "🔧 Converting date..."
             
-            if [ ! -f "vendor/autoload.php" ]; then
-              echo "❌ vendor/autoload.php not found. Checking if MultiCalendar is installed..."
-              if [ -d "vendor/jobmetric/multi-calendar" ]; then
-                echo "⚠️  MultiCalendar directory exists but autoload.php is missing"
+            chmod +x ./convert-date.sh 2>/dev/null || true
+            CONVERTED=$(./convert-date.sh "$CREATED_AT" --to "$TARGET_CAL" --output-format "Y-m-d" 2>&1)
+            CONVERT_EXIT_CODE=$?
+            
+            if [ $CONVERT_EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
+              echo "✅ Date converted: $CONVERTED"
+              if [ "$DATE_FORMAT" == "both" ]; then
+                CREATED_DATE="${CREATED_DATE} / ${CONVERTED} (${TARGET_CAL})"
               else
-                echo "❌ MultiCalendar package not found in vendor directory"
+                CREATED_DATE="${CONVERTED} (${TARGET_CAL})"
               fi
-              echo "⚠️  Using Gregorian date only (autoload not found)"
             else
-              CONVERTED=$(./convert-date.sh "$CREATED_AT" --to "$TARGET_CAL" --output-format "Y-m-d H:i:s" 2>&1)
-              CONVERT_EXIT_CODE=$?
-              
-              echo "📊 Exit code: $CONVERT_EXIT_CODE"
-              echo "📊 Output: $CONVERTED"
-              
-              if [ $CONVERT_EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-                echo "✅ Converted date: $CONVERTED"
-                if [ "$DATE_FORMAT" == "both" ]; then
-                  CREATED_DATE="${CREATED_DATE} / ${CONVERTED} (${TARGET_CAL})"
-                else
-                  CREATED_DATE="${CONVERTED} (${TARGET_CAL})"
-                fi
-              else
-                echo "❌ Date conversion failed"
-                echo "📋 Error details: $CONVERTED"
-                echo "⚠️  Using Gregorian date only (conversion failed)"
-              fi
-            fi
-            else
-              echo "❌ convert-date.sh script not found"
-              echo "⚠️  Date conversion will be skipped. Using Gregorian date only."
+              echo "⚠️  Date conversion failed, using Gregorian date"
             fi
           fi
+          
+          echo "📅 Final date: $CREATED_DATE"
 
           escape_html() { echo "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
           ISSUE_TITLE_ESC=$(escape_html "$ISSUE_TITLE")
