@@ -110,20 +110,8 @@ jobs:
 
           if [ -z "$AUTOLOAD_FILE" ]; then
             echo "Error: vendor/autoload.php not found" >&2
-            echo "Current directory: $(pwd)" >&2
-            echo "Files in current directory:" >&2
-            ls -la >&2
             exit 1
           fi
-          
-          echo "Using autoload file: $AUTOLOAD_FILE" >&2
-
-          echo "Environment variables:" >&2
-          echo "  MC_DATE: $DATE" >&2
-          echo "  MC_FROM: $FROM_CAL" >&2
-          echo "  MC_TO: $TO_CAL" >&2
-          echo "  MC_FMT_IN: $FMT_INPUT" >&2
-          echo "  MC_FMT_OUT: $FMT_OUTPUT" >&2
           
           AUTOLOAD_FILE="$AUTOLOAD_FILE" \
           MC_DATE="$DATE" \
@@ -138,9 +126,7 @@ jobs:
               exit(1);
           }
           
-          fwrite(STDERR, "Loading autoload: $autoload" . PHP_EOL);
           require_once $autoload;
-          fwrite(STDERR, "Autoload loaded successfully" . PHP_EOL);
           
           function env(string $k): ?string {
               $v = getenv($k);
@@ -148,20 +134,11 @@ jobs:
           }
           
           try {
-              fwrite(STDERR, "Checking for ConvertDateCommand class..." . PHP_EOL);
               if (!class_exists("JobMetric\\MultiCalendar\\Console\\ConvertDateCommand")) {
                   fwrite(STDERR, "Error: ConvertDateCommand class not found" . PHP_EOL);
-                  fwrite(STDERR, "Available classes in JobMetric\\MultiCalendar\\Console namespace:" . PHP_EOL);
-                  $classes = get_declared_classes();
-                  foreach ($classes as $class) {
-                      if (strpos($class, "JobMetric\\MultiCalendar") !== false) {
-                          fwrite(STDERR, "  - $class" . PHP_EOL);
-                      }
-                  }
                   exit(1);
               }
               
-              fwrite(STDERR, "ConvertDateCommand class found, creating instance..." . PHP_EOL);
               $cmd = new JobMetric\MultiCalendar\Console\ConvertDateCommand();
               
               $toCal = env("MC_TO") ?: "gregorian";
@@ -184,12 +161,9 @@ jobs:
                   exit(1);
               }
               
-              fwrite(STDERR, "Conversion successful: $result" . PHP_EOL);
               echo trim($result) . PHP_EOL;
           } catch (Throwable $e) {
               fwrite(STDERR, "Error: " . $e->getMessage() . PHP_EOL);
-              fwrite(STDERR, "File: " . $e->getFile() . ":" . $e->getLine() . PHP_EOL);
-              fwrite(STDERR, "Trace: " . $e->getTraceAsString() . PHP_EOL);
               exit(1);
           }
           '
