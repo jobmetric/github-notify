@@ -157,10 +157,6 @@ jobs:
             fi
             
             if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-               TIMEZONE_DISPLAY="$TARGET_TIMEZONE"
-               if [ "$TIMEZONE_DISPLAY" == "Asia/Tehran" ]; then
-                 TIMEZONE_DISPLAY="IRST"
-               fi
                if [ "$DATE_FORMAT" == "both" ]; then
                  CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TIMEZONE_DISPLAY}"
                else
