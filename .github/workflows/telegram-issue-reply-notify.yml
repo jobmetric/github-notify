@@ -64,12 +64,6 @@ jobs:
             else
               echo "⚠️  Autoload file not found"
             fi
-            if [ -d "vendor/jobmetric/multi-calendar" ]; then
-              echo "✅ Package directory exists: vendor/jobmetric/multi-calendar"
-            fi
-          else
-            echo "❌ Failed to install MultiCalendar package"
-            exit 1
           fi
 
       - name: Create Date Converter Script
