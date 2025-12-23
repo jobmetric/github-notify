@@ -126,9 +126,11 @@ jobs:
             
             DATE_TO_CONVERT="$CREATED_AT"
             FORMAT_INPUT=""
+            TIME_PART=""
             
             if [[ "$CREATED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
               FORMAT_INPUT="Y-m-d\\TH:i:s"
+              TIME_PART=$(echo "$CREATED_AT" | sed -n 's/.*T\([0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\).*/\1/p')
               if [[ "$CREATED_AT" =~ Z$ ]]; then
                 DATE_TO_CONVERT="${CREATED_AT%Z}"
               elif [[ "$CREATED_AT" =~ \+[0-9]{2}:[0-9]{2}$ ]]; then
@@ -147,10 +149,18 @@ jobs:
             fi
             
             if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-               if [ "$DATE_FORMAT" == "both" ]; then
-                 CREATED_DATE="${CREATED_AT} / ${CONVERTED}"
+               if [ -n "$TIME_PART" ]; then
+                 if [ "$DATE_FORMAT" == "both" ]; then
+                   CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TIME_PART} UTC"
+                 else
+                   CREATED_DATE="${CONVERTED} ${TIME_PART} UTC"
+                 fi
                else
-                 CREATED_DATE="${CONVERTED}"
+                 if [ "$DATE_FORMAT" == "both" ]; then
+                   CREATED_DATE="${CREATED_AT} / ${CONVERTED}"
+                 else
+                   CREATED_DATE="${CONVERTED}"
+                 fi
                fi
             else
               echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
