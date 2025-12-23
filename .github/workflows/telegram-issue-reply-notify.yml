@@ -12,6 +12,11 @@ on:
         required: false
         type: string
         default: "jalali"
+      timezone:
+        description: "Timezone for date conversion (e.g., UTC, Asia/Tehran)"
+        required: false
+        type: string
+        default: "UTC"
     secrets:
       bot_token:
         description: "Telegram bot token"
@@ -124,6 +129,11 @@ jobs:
                TARGET_CAL="${CALENDAR_TYPE:-jalali}"
             fi
             
+            TARGET_TIMEZONE="${TIMEZONE:-UTC}"
+            if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
+              TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+            fi
+            
             DATE_TO_CONVERT="$CREATED_AT"
             FORMAT_INPUT=""
             
@@ -139,26 +149,22 @@ jobs:
             fi
             
             if [ -n "$FORMAT_INPUT" ]; then
-              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d" 2>&1)
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
               EXIT_CODE=$?
             else
-              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d" 2>&1)
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
               EXIT_CODE=$?
             fi
             
             if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-               if [ -n "$TIME_PART" ]; then
-                 if [ "$DATE_FORMAT" == "both" ]; then
-                   CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TIME_PART} UTC"
-                 else
-                   CREATED_DATE="${CONVERTED} ${TIME_PART} UTC"
-                 fi
+               TIMEZONE_DISPLAY="$TARGET_TIMEZONE"
+               if [ "$TIMEZONE_DISPLAY" == "Asia/Tehran" ]; then
+                 TIMEZONE_DISPLAY="IRST"
+               fi
+               if [ "$DATE_FORMAT" == "both" ]; then
+                 CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TIMEZONE_DISPLAY}"
                else
-                 if [ "$DATE_FORMAT" == "both" ]; then
-                   CREATED_DATE="${CREATED_AT} / ${CONVERTED}"
-                 else
-                   CREATED_DATE="${CONVERTED}"
-                 fi
+                 CREATED_DATE="${CONVERTED} ${TIMEZONE_DISPLAY}"
                fi
             else
               echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
