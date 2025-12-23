@@ -40,30 +40,48 @@ jobs:
         run: |
           if [ -f "composer.json" ]; then
             composer install --no-dev --no-interaction --prefer-dist
+          else
+            composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           fi
 
       - name: Find Date Converter Script
         if: inputs.date_format != '' && inputs.date_format != null
         id: find_script
         run: |
-          SCRIPT_PATH=""
-          if [ -f "packages/multi-calendar/bin/date-converter.sh" ]; then
-            SCRIPT_PATH="packages/multi-calendar/bin/date-converter.sh"
-          elif [ -f "./packages/multi-calendar/bin/date-converter.sh" ]; then
-            SCRIPT_PATH="./packages/multi-calendar/bin/date-converter.sh"
-          else
-            FIND_SCRIPT=$(find . -name "date-converter.sh" -path "*/multi-calendar/bin/*" | head -n 1)
-            if [ -n "$FIND_SCRIPT" ]; then
-              SCRIPT_PATH="$FIND_SCRIPT"
-            fi
-          fi
+          echo "=== Searching for date-converter.sh script ==="
           
-          if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
-            echo "Error: date-converter.sh not found"
-            exit 1
+          SCRIPT_PATH=""
+          
+          POSSIBLE_PATHS=(
+            "vendor/jobmetric/multi-calendar/bin/date-converter.sh"
+            "vendor/jobmetric/multi-calendar/date-converter.sh"
+            "vendor/jobmetric/multi-calendar/.github/scripts/date-converter.sh"
+          )
+          
+          echo "🔍 Checking package paths..."
+          for path in "${POSSIBLE_PATHS[@]}"; do
+            if [ -f "$path" ]; then
+              SCRIPT_PATH="$path"
+              echo "✅ Script found: $path"
+              break
+            fi
+          done
+          
+          if [ -z "$SCRIPT_PATH" ]; then
+            echo "⚠️  Script not found in package"
+            echo "📥 Downloading from repository..."
+            mkdir -p bin
+            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/master/bin/date-converter.sh -o bin/date-converter.sh || \
+            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/main/bin/date-converter.sh -o bin/date-converter.sh || {
+              echo "❌ Failed to download script from repository"
+              exit 1
+            }
+            SCRIPT_PATH="bin/date-converter.sh"
+            echo "✅ Script downloaded: $SCRIPT_PATH"
           fi
           
           chmod +x "$SCRIPT_PATH"
+          echo "✅ Script is executable: $SCRIPT_PATH"
           echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
 
       - name: Send Telegram notification for issue comment
@@ -121,10 +139,10 @@ jobs:
             fi
             
             if [ -n "$FORMAT_INPUT" ]; then
-              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" 2>&1)
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d" 2>&1)
               EXIT_CODE=$?
             else
-              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" 2>&1)
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d" 2>&1)
               EXIT_CODE=$?
             fi
             
