@@ -35,89 +35,36 @@ jobs:
           php-version: '8.2'
           extensions: intl
 
-      - name: Install Composer and MultiCalendar package
+      - name: Install Dependencies
         if: inputs.date_format != '' && inputs.date_format != null
         run: |
-          echo "=== Checking Composer ==="
-          if command -v composer &> /dev/null; then
-            echo "✅ Composer is installed."
-            echo "Composer version: $(composer -V | head -1)"
+          if [ -f "composer.json" ]; then
+            composer install --no-dev --no-interaction --prefer-dist
+          fi
+
+      - name: Find Date Converter Script
+        if: inputs.date_format != '' && inputs.date_format != null
+        id: find_script
+        run: |
+          SCRIPT_PATH=""
+          if [ -f "packages/multi-calendar/bin/date-converter.sh" ]; then
+            SCRIPT_PATH="packages/multi-calendar/bin/date-converter.sh"
+          elif [ -f "./packages/multi-calendar/bin/date-converter.sh" ]; then
+            SCRIPT_PATH="./packages/multi-calendar/bin/date-converter.sh"
           else
-            echo "❌ Composer is not installed. Attempting to install..."
-            curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-            if command -v composer &> /dev/null; then
-              echo "✅ Composer installed successfully."
-            else
-              echo "❌ Failed to install Composer. Date conversion may fail."
-              exit 1
+            FIND_SCRIPT=$(find . -name "date-converter.sh" -path "*/multi-calendar/bin/*" | head -n 1)
+            if [ -n "$FIND_SCRIPT" ]; then
+              SCRIPT_PATH="$FIND_SCRIPT"
             fi
           fi
-
-          echo ""
-          echo "=== Installing MultiCalendar package (latest version) ==="
-          composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           
-          if [ $? -eq 0 ]; then
-            echo "✅ MultiCalendar package installed successfully"
-            if [ -f "vendor/autoload.php" ]; then
-              echo "✅ Autoload file found: vendor/autoload.php"
-            else
-              echo "⚠️  Autoload file not found"
-            fi
-          fi
-
-      - name: Create Date Converter Script
-        if: inputs.date_format != '' && inputs.date_format != null
-        run: |
-          echo "=== Creating convert-date.sh script ==="
-          
-          cat > convert-date.sh << 'SCRIPT_EOF'
-          #!/bin/bash
-          DATE="$1"
-          TO_CAL="${2:-jalali}"
-          
-          if [ -z "$DATE" ]; then
-            echo "Error: Date is required" >&2
+          if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
+            echo "Error: date-converter.sh not found"
             exit 1
           fi
           
-          if [ ! -f "vendor/autoload.php" ]; then
-            echo "Error: vendor/autoload.php not found" >&2
-            exit 1
-          fi
-          
-          MC_DATE="$DATE" MC_TO="$TO_CAL" php -r '
-          require_once "vendor/autoload.php";
-          use JobMetric\MultiCalendar\Factory\CalendarConverterFactory;
-          
-          $date = getenv("MC_DATE");
-          $toCal = getenv("MC_TO");
-          
-          try {
-              $dateTime = new DateTime($date);
-              $gy = (int)$dateTime->format("Y");
-              $gm = (int)$dateTime->format("m");
-              $gd = (int)$dateTime->format("d");
-              
-              $converter = CalendarConverterFactory::make($toCal);
-              $result = $converter->fromGregorian($gy, $gm, $gd, "-");
-              
-              if (is_string($result)) {
-                  echo $result;
-              } else {
-                  echo sprintf("%04d-%02d-%02d", $result[0], $result[1], $result[2]);
-              }
-          } catch (Throwable $e) {
-              fwrite(STDERR, "Error: " . $e->getMessage());
-              exit(1);
-          }
-          '
-          SCRIPT_EOF
-          
-          chmod +x convert-date.sh
-          echo "✅ Script created: convert-date.sh"
-          echo "✅ Script is executable"
-          echo "✅ Script size: $(wc -c < convert-date.sh) bytes"
+          chmod +x "$SCRIPT_PATH"
+          echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
 
       - name: Send Telegram notification for issue comment
         env:
@@ -140,78 +87,72 @@ jobs:
           AUTHOR="${{ github.event.comment.user.login }}"
           CREATED_AT="${{ github.event.comment.created_at }}"
           
-          CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d" 2>/dev/null || echo "$CREATED_AT")
+          CREATED_DATE="$CREATED_AT"
           
-          if [ -n "$DATE_FORMAT" ]; then
-            echo "=== Converting date ==="
-            echo "📅 Original date: $CREATED_AT"
-            echo "📋 Date format: $DATE_FORMAT"
+          if [ -n "$DATE_FORMAT" ] && [ -n "${{ steps.find_script.outputs.script_path }}" ]; then
+            SCRIPT_PATH="${{ steps.find_script.outputs.script_path }}"
             
-            if [ ! -f "./convert-date.sh" ]; then
-              echo "❌ convert-date.sh not found in current directory"
-              echo "🔍 Current directory: $(pwd)"
-              echo "🔍 Files in current directory:"
-              ls -la | head -10
-              echo "🔍 Searching for script..."
-              find . -name "convert-date.sh" -type f 2>/dev/null | head -5
-              echo "⚠️  Date conversion skipped, using Gregorian date"
-            elif [ ! -f "vendor/autoload.php" ]; then
-              echo "❌ vendor/autoload.php not found"
-              echo "⚠️  Date conversion skipped, using Gregorian date"
-            else
-              TARGET_CAL="${DATE_FORMAT}"
-              if [ "$DATE_FORMAT" == "both" ]; then
-                 TARGET_CAL="${CALENDAR_TYPE:-jalali}"
-              fi
-              
-              echo "🔄 Target calendar: $TARGET_CAL"
-              echo "🔧 Converting date..."
-              echo "📁 Script path: $(pwd)/convert-date.sh"
-              echo "📁 Script exists: $([ -f "./convert-date.sh" ] && echo "yes" || echo "no")"
-              echo "📁 Script executable: $([ -x "./convert-date.sh" ] && echo "yes" || echo "no")"
-              
-              chmod +x ./convert-date.sh 2>/dev/null || true
-              echo "🔧 Running: ./convert-date.sh \"$CREATED_AT\" --to \"$TARGET_CAL\" --output-format \"Y-m-d\""
-              
-              CONVERTED=$(./convert-date.sh "$CREATED_AT" --to "$TARGET_CAL" --output-format "Y-m-d" 2>&1)
-              CONVERT_EXIT_CODE=$?
-              
-              echo "📊 Exit code: $CONVERT_EXIT_CODE"
-              echo "📊 Output: $CONVERTED"
-              
-              if [ $CONVERT_EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-                echo "✅ Date converted: $CONVERTED"
-                if [ "$DATE_FORMAT" == "both" ]; then
-                  CREATED_DATE="${CREATED_DATE} / ${CONVERTED} (${TARGET_CAL})"
-                else
-                  CREATED_DATE="${CONVERTED} (${TARGET_CAL})"
-                fi
-              else
-                echo "⚠️  Date conversion failed, using Gregorian date"
-                if [ $CONVERT_EXIT_CODE -eq 127 ]; then
-                  echo "❌ Script not found or not executable (exit code 127)"
-                fi
+            if [ ! -f "$SCRIPT_PATH" ]; then
+              echo "Error: Script not found at $SCRIPT_PATH"
+              exit 1
+            fi
+            
+            if [ ! -x "$SCRIPT_PATH" ]; then
+              chmod +x "$SCRIPT_PATH"
+            fi
+            
+            TARGET_CAL="${DATE_FORMAT}"
+            if [ "$DATE_FORMAT" == "both" ]; then
+               TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+            fi
+            
+            DATE_TO_CONVERT="$CREATED_AT"
+            FORMAT_INPUT=""
+            
+            if [[ "$CREATED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
+              FORMAT_INPUT="Y-m-d\\TH:i:s"
+              if [[ "$CREATED_AT" =~ Z$ ]]; then
+                DATE_TO_CONVERT="${CREATED_AT%Z}"
+              elif [[ "$CREATED_AT" =~ \+[0-9]{2}:[0-9]{2}$ ]]; then
+                DATE_TO_CONVERT="${CREATED_AT%+*}"
+              elif [[ "$CREATED_AT" =~ -[0-9]{2}:[0-9]{2}$ ]]; then
+                DATE_TO_CONVERT="${CREATED_AT%-*}"
               fi
             fi
+            
+            if [ -n "$FORMAT_INPUT" ]; then
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" 2>&1)
+              EXIT_CODE=$?
+            else
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" 2>&1)
+              EXIT_CODE=$?
+            fi
+            
+            if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
+               if [ "$DATE_FORMAT" == "both" ]; then
+                 CREATED_DATE="${CREATED_AT} / ${CONVERTED}"
+               else
+                 CREATED_DATE="${CONVERTED}"
+               fi
+            else
+              echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
+            fi
           fi
-          
-          echo "📅 Final date: $CREATED_DATE"
 
           escape_html() { echo "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
           ISSUE_TITLE_ESC=$(escape_html "$ISSUE_TITLE")
           COMMENT_BODY_ESC=$(escape_html "$COMMENT_BODY" | head -c 1000)
 
           MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
-          MESSAGE="${MESSAGE}Title issue: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}Title: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
           
-          if [ -n "$COMMENT_BODY_ESC" ] && [ "$COMMENT_BODY_ESC" != "null" ] && [ "$COMMENT_BODY_ESC" != "" ]; then
-            MESSAGE="${MESSAGE}Comment issue: ${COMMENT_BODY_ESC}"$'\n\n'
+          if [ -n "$COMMENT_BODY_ESC" ]; then
+            MESSAGE="${MESSAGE}Comment: ${COMMENT_BODY_ESC}"$'\n\n'
           fi
 
-          MESSAGE="${MESSAGE}Commented by: <b><code>${AUTHOR}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}By: <b><code>${AUTHOR}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
-          MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue on GitHub</a>"$'\n'
-          MESSAGE="${MESSAGE}<a href=\"${COMMENT_URL}\">View Comment on GitHub</a>"
+          MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue</a> | <a href=\"${COMMENT_URL}\">View Comment</a>"
 
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
