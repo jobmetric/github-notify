@@ -2,6 +2,21 @@ name: Telegram Open Issue Notify
 
 on:
   workflow_call:
+    inputs:
+      date_format:
+        description: "Date format"
+        required: false
+        type: string
+      calendar_type:
+        description: "Calendar type"
+        required: false
+        type: string
+        default: "jalali"
+      timezone:
+        description: "Timezone for date conversion (e.g., UTC, Asia/Tehran)"
+        required: false
+        type: string
+        default: "UTC"
     secrets:
       bot_token:
         description: "Telegram bot token created via BotFather"
@@ -14,10 +29,73 @@ jobs:
   notify-issue:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        if: inputs.date_format != '' && inputs.date_format != null
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        if: inputs.date_format != '' && inputs.date_format != null
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: intl
+
+      - name: Install Dependencies
+        if: inputs.date_format != '' && inputs.date_format != null
+        run: |
+          if [ -f "composer.json" ]; then
+            composer install --no-dev --no-interaction --prefer-dist
+          else
+            composer require jobmetric/multi-calendar --prefer-dist --no-interaction
+          fi
+
+      - name: Find Date Converter Script
+        if: inputs.date_format != '' && inputs.date_format != null
+        id: find_script
+        run: |
+          echo "=== Searching for date-converter.sh script ==="
+          
+          SCRIPT_PATH=""
+          
+          POSSIBLE_PATHS=(
+            "vendor/jobmetric/multi-calendar/bin/date-converter.sh"
+            "vendor/jobmetric/multi-calendar/date-converter.sh"
+            "vendor/jobmetric/multi-calendar/.github/scripts/date-converter.sh"
+          )
+          
+          echo "🔍 Checking package paths..."
+          for path in "${POSSIBLE_PATHS[@]}"; do
+            if [ -f "$path" ]; then
+              SCRIPT_PATH="$path"
+              echo "✅ Script found: $path"
+              break
+            fi
+          done
+          
+          if [ -z "$SCRIPT_PATH" ]; then
+            echo "⚠️  Script not found in package"
+            echo "📥 Downloading from repository..."
+            mkdir -p bin
+            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/master/bin/date-converter.sh -o bin/date-converter.sh || \
+            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/main/bin/date-converter.sh -o bin/date-converter.sh || {
+              echo "❌ Failed to download script from repository"
+              exit 1
+            }
+            SCRIPT_PATH="bin/date-converter.sh"
+            echo "✅ Script downloaded: $SCRIPT_PATH"
+          fi
+          
+          chmod +x "$SCRIPT_PATH"
+          echo "✅ Script is executable: $SCRIPT_PATH"
+          echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
+
       - name: Send Telegram notification for opened issue
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
           TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
+          DATE_FORMAT: ${{ inputs.date_format }}
+          CALENDAR_TYPE: ${{ inputs.calendar_type }}
+          TIMEZONE: ${{ inputs.timezone }}
         shell: bash
         run: |
           # Skip if credentials not set
@@ -35,8 +113,62 @@ jobs:
           AUTHOR="${{ github.event.issue.user.login }}"
           CREATED_AT="${{ github.event.issue.created_at }}"
 
-          # Format date (convert ISO 8601 to readable format)
-          if [ -n "$CREATED_AT" ]; then
+          CREATED_DATE="$CREATED_AT"
+          
+          if [ -n "$DATE_FORMAT" ] && [ -n "${{ steps.find_script.outputs.script_path }}" ]; then
+            SCRIPT_PATH="${{ steps.find_script.outputs.script_path }}"
+            
+            if [ ! -f "$SCRIPT_PATH" ]; then
+              echo "Error: Script not found at $SCRIPT_PATH"
+              exit 1
+            fi
+            
+            if [ ! -x "$SCRIPT_PATH" ]; then
+              chmod +x "$SCRIPT_PATH"
+            fi
+            
+            TARGET_CAL="${DATE_FORMAT}"
+            if [ "$DATE_FORMAT" == "both" ]; then
+               TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+            fi
+            
+            TARGET_TIMEZONE="${TIMEZONE:-UTC}"
+            if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
+              TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+            fi
+            
+            DATE_TO_CONVERT="$CREATED_AT"
+            FORMAT_INPUT=""
+            
+            if [[ "$CREATED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
+              FORMAT_INPUT="Y-m-d\\TH:i:s"
+              if [[ "$CREATED_AT" =~ Z$ ]]; then
+                DATE_TO_CONVERT="${CREATED_AT%Z}"
+              elif [[ "$CREATED_AT" =~ \+[0-9]{2}:[0-9]{2}$ ]]; then
+                DATE_TO_CONVERT="${CREATED_AT%+*}"
+              elif [[ "$CREATED_AT" =~ -[0-9]{2}:[0-9]{2}$ ]]; then
+                DATE_TO_CONVERT="${CREATED_AT%-*}"
+              fi
+            fi
+            
+            if [ -n "$FORMAT_INPUT" ]; then
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              EXIT_CODE=$?
+            else
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              EXIT_CODE=$?
+            fi
+            
+            if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
+               if [ "$DATE_FORMAT" == "both" ]; then
+                 CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
+               else
+                 CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
+               fi
+            else
+              echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
+            fi
+          elif [ -n "$CREATED_AT" ]; then
             CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CREATED_AT")
           else
             CREATED_DATE="N/A"
