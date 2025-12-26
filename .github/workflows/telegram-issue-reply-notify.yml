@@ -114,8 +114,12 @@ jobs:
           
           CREATED_DATE="$CREATED_AT"
           
-          if [ -n "$DATE_FORMAT" ] && [ -n "${{ steps.find_script.outputs.script_path }}" ]; then
-            SCRIPT_PATH="${{ steps.find_script.outputs.script_path }}"
+          SCRIPT_PATH=""
+          if [ -n "$DATE_FORMAT" ]; then
+            SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
+          fi
+          
+          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ]; then
             
             if [ ! -f "$SCRIPT_PATH" ]; then
               echo "Error: Script not found at $SCRIPT_PATH"
