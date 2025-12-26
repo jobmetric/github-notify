@@ -117,14 +117,12 @@ jobs:
           SCRIPT_PATH=""
           if [ -n "$DATE_FORMAT" ]; then
             SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
+            if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
+              echo "Warning: Date converter script not found. Using original date format."
+            fi
           fi
           
-          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ]; then
-            
-            if [ ! -f "$SCRIPT_PATH" ]; then
-              echo "Error: Script not found at $SCRIPT_PATH"
-              exit 1
-            fi
+          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
             
             if [ ! -x "$SCRIPT_PATH" ]; then
               chmod +x "$SCRIPT_PATH"
