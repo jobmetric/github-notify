@@ -176,32 +176,66 @@ jobs:
             CREATED_DATE="N/A"
           fi
 
+          echo "=== Building Telegram Message ==="
+          echo "REPO: $REPO"
+          echo "PULL_REQUEST_NUMBER: $PULL_REQUEST_NUMBER"
+          echo "PULL_REQUEST_TITLE: $PULL_REQUEST_TITLE"
+          echo "PULL_REQUEST_BODY: $PULL_REQUEST_BODY"
+          echo "AUTHOR: $AUTHOR"
+          echo "CREATED_DATE: $CREATED_DATE"
+          echo "PULL_REQUEST_URL: $PULL_REQUEST_URL"
+          
           # Escape HTML special characters (only for title and body, as in original working code)
           PULL_REQUEST_TITLE_ESC=$(echo "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-          PULL_REQUEST_BODY_ESC=$(echo "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
+          
+          PULL_REQUEST_BODY_ESC=""
+          if [ -n "$PULL_REQUEST_BODY" ] && [ "$PULL_REQUEST_BODY" != "null" ]; then
+            PULL_REQUEST_BODY_ESC=$(echo "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
+          fi
+          
+          echo "PULL_REQUEST_TITLE_ESC: $PULL_REQUEST_TITLE_ESC"
+          echo "PULL_REQUEST_BODY_ESC: $PULL_REQUEST_BODY_ESC"
 
           # Build message with improved HTML formatting (exactly as in original working code)
           MESSAGE="Open PR <b><code>${REPO}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PULL_REQUEST_TITLE_ESC}</b>"$'\n\n'
 
-          if [ -n "$PULL_REQUEST_BODY_ESC" ] && [ "$PULL_REQUEST_BODY_ESC" != "null" ]; then
+          if [ -n "$PULL_REQUEST_BODY_ESC" ]; then
             MESSAGE="${MESSAGE}<b>${PULL_REQUEST_BODY_ESC}</b> "$'\n\n'
           fi
 
           MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
-          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE:-N/A}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${PULL_REQUEST_URL}\">View Pull Request on GitHub</a>"
 
-          # Send message to Telegram and capture response
-          echo "Sending notification to Telegram..."
+          echo "=== Message Content ==="
+          echo "Message length: ${#MESSAGE} characters"
+          echo "Message preview (first 500 chars):"
+          echo "${MESSAGE:0:500}"
+          echo "=== End Message Preview ==="
+
+          echo "=== Sending to Telegram ==="
+          echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:0:10}... (hidden)"
+          echo "TELEGRAM_CHAT_ID: $TELEGRAM_CHAT_ID"
+          echo "API URL: https://api.telegram.org/bot***/sendMessage"
+          
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$MESSAGE" \
             -d parse_mode="HTML" \
-            -d disable_web_page_preview=true)
+            -d disable_web_page_preview=true 2>&1)
+          
+          CURL_EXIT_CODE=$?
+          echo "Curl exit code: $CURL_EXIT_CODE"
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "=== Telegram API Response ==="
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Response Body: $BODY"
+          echo "Full Response: $RESPONSE"
+          echo "=== End Response ==="
 
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Telegram pull request notification sent successfully"
@@ -210,5 +244,6 @@ jobs:
             echo "❌ Failed to send Telegram notification"
             echo "HTTP Code: $HTTP_CODE"
             echo "Response: $BODY"
+            echo "Full curl response: $RESPONSE"
             exit 1
           fi

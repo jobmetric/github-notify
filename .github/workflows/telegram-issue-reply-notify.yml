@@ -171,14 +171,28 @@ jobs:
             fi
           fi
 
-          escape_html() { echo "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
-          ISSUE_TITLE_ESC=$(escape_html "$ISSUE_TITLE")
-          COMMENT_BODY_ESC=$(escape_html "$COMMENT_BODY" | head -c 1000)
+          echo "=== Building Telegram Message ==="
+          echo "REPO: $REPO"
+          echo "ISSUE_NUMBER: $ISSUE_NUMBER"
+          echo "ISSUE_TITLE: $ISSUE_TITLE"
+          echo "COMMENT_BODY: $COMMENT_BODY"
+          echo "AUTHOR: $AUTHOR"
+          echo "CREATED_DATE: $CREATED_DATE"
+          echo "ISSUE_URL: $ISSUE_URL"
+          echo "COMMENT_URL: $COMMENT_URL"
+          
+          # Escape HTML special characters (only for title and body, as in original working code)
+          ISSUE_TITLE_ESC=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+          COMMENT_BODY_ESC=$(echo "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
+          
+          echo "ISSUE_TITLE_ESC: $ISSUE_TITLE_ESC"
+          echo "COMMENT_BODY_ESC: $COMMENT_BODY_ESC"
 
+          # Build message with improved HTML formatting (exactly as in original working code)
           MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}Title: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
           
-          if [ -n "$COMMENT_BODY_ESC" ]; then
+          if [ -n "$COMMENT_BODY_ESC" ] && [ "$COMMENT_BODY_ESC" != "null" ]; then
             MESSAGE="${MESSAGE}Comment: ${COMMENT_BODY_ESC}"$'\n\n'
           fi
 
@@ -186,15 +200,34 @@ jobs:
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue</a> | <a href=\"${COMMENT_URL}\">View Comment</a>"
 
-          echo "Sending notification to Telegram..."
+          echo "=== Message Content ==="
+          echo "Message length: ${#MESSAGE} characters"
+          echo "Message preview (first 500 chars):"
+          echo "${MESSAGE:0:500}"
+          echo "=== End Message Preview ==="
+
+          echo "=== Sending to Telegram ==="
+          echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:0:10}... (hidden)"
+          echo "TELEGRAM_CHAT_ID: $TELEGRAM_CHAT_ID"
+          echo "API URL: https://api.telegram.org/bot***/sendMessage"
+          
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$MESSAGE" \
             -d parse_mode="HTML" \
-            -d disable_web_page_preview=true)
+            -d disable_web_page_preview=true 2>&1)
+          
+          CURL_EXIT_CODE=$?
+          echo "Curl exit code: $CURL_EXIT_CODE"
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "=== Telegram API Response ==="
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Response Body: $BODY"
+          echo "Full Response: $RESPONSE"
+          echo "=== End Response ==="
 
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Telegram issue comment notification sent successfully"
@@ -203,5 +236,6 @@ jobs:
             echo "❌ Failed to send Telegram notification"
             echo "HTTP Code: $HTTP_CODE"
             echo "Response: $BODY"
+            echo "Full curl response: $RESPONSE"
             exit 1
           fi
