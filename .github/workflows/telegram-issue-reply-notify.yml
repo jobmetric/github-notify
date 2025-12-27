@@ -120,18 +120,34 @@ jobs:
           CREATED_AT="${{ github.event.comment.created_at }}"
           
           echo "Variables assigned successfully"
+          echo "CREATED_AT: $CREATED_AT"
+          echo "DATE_FORMAT: $DATE_FORMAT"
+          echo "CALENDAR_TYPE: $CALENDAR_TYPE"
+          echo "TIMEZONE: $TIMEZONE"
           
+          echo ""
+          echo "=== Date Conversion Section ==="
           CREATED_DATE="$CREATED_AT"
+          echo "Initial CREATED_DATE: $CREATED_DATE"
           
           SCRIPT_PATH=""
+          echo "Checking DATE_FORMAT..."
           if [ -n "$DATE_FORMAT" ]; then
+            echo "DATE_FORMAT is set: $DATE_FORMAT"
             SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
+            echo "SCRIPT_PATH from step: '$SCRIPT_PATH'"
             if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
               echo "Warning: Date converter script not found. Using original date format."
+            else
+              echo "Script found at: $SCRIPT_PATH"
             fi
+          else
+            echo "DATE_FORMAT is empty, skipping date conversion"
           fi
           
+          echo "Checking if date conversion should run..."
           if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+            echo "Date conversion will run"
             
             if [ ! -x "$SCRIPT_PATH" ]; then
               chmod +x "$SCRIPT_PATH"
@@ -169,17 +185,26 @@ jobs:
               EXIT_CODE=$?
             fi
             
+            echo "Date conversion exit code: $EXIT_CODE"
+            echo "Date conversion result: $CONVERTED"
             if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
+               echo "Date conversion successful"
                if [ "$DATE_FORMAT" == "both" ]; then
                  CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
                else
                  CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
                fi
+               echo "Final CREATED_DATE: $CREATED_DATE"
             else
               echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
             fi
+          else
+            echo "Date conversion skipped (conditions not met)"
           fi
+          echo "=== Date Conversion Section Complete ==="
+          echo "Final CREATED_DATE: $CREATED_DATE"
 
+          echo ""
           echo "=== Building Telegram Message ==="
           echo "REPO: $REPO"
           echo "ISSUE_NUMBER: $ISSUE_NUMBER"
@@ -191,33 +216,74 @@ jobs:
           echo "COMMENT_URL: $COMMENT_URL"
           
           echo "=== Escaping HTML Content ==="
+          set +e
           
           # Escape HTML special characters (only for title and body, as in original working code)
+          echo "Escaping ISSUE_TITLE..."
           ISSUE_TITLE_ESC=""
           if [ -n "$ISSUE_TITLE" ]; then
+            echo "ISSUE_TITLE is not empty, escaping..."
             ISSUE_TITLE_ESC=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' || echo "$ISSUE_TITLE")
+            ESCAPE_EXIT=$?
+            echo "ISSUE_TITLE escape exit code: $ESCAPE_EXIT"
+          else
+            echo "ISSUE_TITLE is empty"
           fi
           
+          echo "Escaping COMMENT_BODY..."
           COMMENT_BODY_ESC=""
           if [ -n "$COMMENT_BODY" ] && [ "$COMMENT_BODY" != "null" ]; then
+            echo "COMMENT_BODY is not empty and not null, escaping..."
             COMMENT_BODY_ESC=$(echo "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 || echo "")
+            ESCAPE_EXIT=$?
+            echo "COMMENT_BODY escape exit code: $ESCAPE_EXIT"
+          else
+            echo "COMMENT_BODY is empty or null"
           fi
           
+          set -e
+          echo "ISSUE_TITLE_ESC length: ${#ISSUE_TITLE_ESC}"
           echo "ISSUE_TITLE_ESC: $ISSUE_TITLE_ESC"
+          echo "COMMENT_BODY_ESC length: ${#COMMENT_BODY_ESC}"
           echo "COMMENT_BODY_ESC: $COMMENT_BODY_ESC"
           echo "=== HTML Escaping Complete ==="
 
-          # Build message with improved HTML formatting (exactly as in original working code)
-          MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
-          MESSAGE="${MESSAGE}Title: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
+          echo ""
+          echo "=== Building Message ==="
+          set +e
           
+          # Build message with improved HTML formatting (exactly as in original working code)
+          echo "Step 1: Adding header..."
+          MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
+          echo "Message after header: ${#MESSAGE} chars"
+          
+          echo "Step 2: Adding title..."
+          MESSAGE="${MESSAGE}Title: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
+          echo "Message after title: ${#MESSAGE} chars"
+          
+          echo "Step 3: Checking COMMENT_BODY_ESC..."
           if [ -n "$COMMENT_BODY_ESC" ] && [ "$COMMENT_BODY_ESC" != "null" ]; then
+            echo "Adding COMMENT_BODY_ESC..."
             MESSAGE="${MESSAGE}Comment: ${COMMENT_BODY_ESC}"$'\n\n'
+            echo "Message after comment: ${#MESSAGE} chars"
+          else
+            echo "COMMENT_BODY_ESC is empty or null, skipping"
           fi
 
+          echo "Step 4: Adding author..."
           MESSAGE="${MESSAGE}By: <b><code>${AUTHOR}</code></b>"$'\n'
+          echo "Message after author: ${#MESSAGE} chars"
+          
+          echo "Step 5: Adding time..."
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          echo "Message after time: ${#MESSAGE} chars"
+          
+          echo "Step 6: Adding links..."
           MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue</a> | <a href=\"${COMMENT_URL}\">View Comment</a>"
+          echo "Message after links: ${#MESSAGE} chars"
+          
+          set -e
+          echo "=== Message Building Complete ==="
 
           echo "=== Message Content ==="
           echo "Message length: ${#MESSAGE} characters"
