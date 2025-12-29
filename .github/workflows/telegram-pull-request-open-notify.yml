@@ -30,18 +30,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        if: inputs.date_format != '' && inputs.date_format != null
+        if: ${{ inputs.date_format }}
         uses: actions/checkout@v4
 
       - name: Setup PHP
-        if: inputs.date_format != '' && inputs.date_format != null
+        if: ${{ inputs.date_format }}
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
           extensions: intl
 
       - name: Install Dependencies
-        if: inputs.date_format != '' && inputs.date_format != null
+        if: ${{ inputs.date_format }}
         run: |
           if [ -f "composer.json" ]; then
             composer install --no-dev --no-interaction --prefer-dist
@@ -73,7 +73,7 @@ jobs:
 
           CREATED_DATE="$CREATED_AT"
           
-          if [ -n "$DATE_FORMAT" ] && [ -f "composer.json" ]; then
+          if [ -n "$DATE_FORMAT" ]; then
             set +e
             
             TARGET_CAL="${DATE_FORMAT}"
