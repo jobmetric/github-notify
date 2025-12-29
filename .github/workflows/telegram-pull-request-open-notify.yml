@@ -48,46 +48,10 @@ jobs:
           else
             composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           fi
-
-      - name: Find Date Converter Script
-        if: inputs.date_format != '' && inputs.date_format != null
-        id: find_script
-        run: |
-          echo "=== Searching for date-converter.sh script ==="
           
-          SCRIPT_PATH=""
-          
-          POSSIBLE_PATHS=(
-            "vendor/jobmetric/multi-calendar/bin/date-converter.sh"
-            "vendor/jobmetric/multi-calendar/date-converter.sh"
-            "vendor/jobmetric/multi-calendar/.github/scripts/date-converter.sh"
-          )
-          
-          echo "🔍 Checking package paths..."
-          for path in "${POSSIBLE_PATHS[@]}"; do
-            if [ -f "$path" ]; then
-              SCRIPT_PATH="$path"
-              echo "✅ Script found: $path"
-              break
-            fi
-          done
-          
-          if [ -z "$SCRIPT_PATH" ]; then
-            echo "⚠️  Script not found in package"
-            echo "📥 Downloading from repository..."
-            mkdir -p bin
-            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/master/bin/date-converter.sh -o bin/date-converter.sh || \
-            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/main/bin/date-converter.sh -o bin/date-converter.sh || {
-              echo "❌ Failed to download script from repository"
-              exit 1
-            }
-            SCRIPT_PATH="bin/date-converter.sh"
-            echo "✅ Script downloaded: $SCRIPT_PATH"
+          if [ -f "vendor/bin/date-converter.sh" ]; then
+            chmod +x vendor/bin/date-converter.sh
           fi
-          
-          chmod +x "$SCRIPT_PATH"
-          echo "✅ Script is executable: $SCRIPT_PATH"
-          echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
 
       - name: Send Telegram notification for opened PR
         env:
@@ -98,50 +62,10 @@ jobs:
           TIMEZONE: ${{ inputs.timezone }}
         shell: bash
         run: |
-          set +e
-          echo "=== Starting Telegram Notification Script ==="
-          echo "Script started at: $(date)"
-          set -e
-          
-          echo ""
-          echo "=== Checking Telegram Credentials ==="
-          echo "TELEGRAM_BOT_TOKEN check:"
-          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "❌ ERROR: TELEGRAM_BOT_TOKEN is EMPTY or NOT SET!"
-            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
-          else
-            echo "✅ TELEGRAM_BOT_TOKEN is set"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
-            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
-          fi
-          
-          echo ""
-          echo "TELEGRAM_CHAT_ID check:"
-          if [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ ERROR: TELEGRAM_CHAT_ID is EMPTY or NOT SET!"
-            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
-          else
-            echo "✅ TELEGRAM_CHAT_ID is set"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
-            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
-          fi
-          
-          echo "=== Credentials Check Complete ==="
-          echo ""
-          
-          # Skip if credentials not set
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ Telegram credentials not set. Skipping Pull Request notification."
-            echo "TELEGRAM_BOT_TOKEN empty: $([ -z "$TELEGRAM_BOT_TOKEN" ] && echo "YES" || echo "NO")"
-            echo "TELEGRAM_CHAT_ID empty: $([ -z "$TELEGRAM_CHAT_ID" ] && echo "YES" || echo "NO")"
             exit 0
           fi
-          
-          echo "✅ Credentials check passed - both token and chat_id are set"
 
-          # Get Pull Request details
           PULL_REQUEST_TITLE="${{ github.event.pull_request.title }}"
           PULL_REQUEST_BODY="${{ github.event.pull_request.body }}"
           PULL_REQUEST_NUMBER="${{ github.event.pull_request.number }}"
@@ -151,16 +75,10 @@ jobs:
           CREATED_AT="${{ github.event.pull_request.created_at }}"
 
           CREATED_DATE="$CREATED_AT"
+          SCRIPT_PATH="vendor/bin/date-converter.sh"
           
-          SCRIPT_PATH=""
-          if [ -n "$DATE_FORMAT" ]; then
-            SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
-            if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
-              echo "Warning: Date converter script not found. Using original date format."
-            fi
-          fi
-          
-          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+          if [ -n "$DATE_FORMAT" ] && [ -f "$SCRIPT_PATH" ]; then
+            set +e
             
             if [ ! -x "$SCRIPT_PATH" ]; then
               chmod +x "$SCRIPT_PATH"
@@ -204,36 +122,24 @@ jobs:
                else
                  CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
                fi
-            else
-              echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
             fi
+            set -e
           elif [ -n "$CREATED_AT" ]; then
             CREATED_DATE=$(date -d "$CREATED_AT" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CREATED_AT")
           else
             CREATED_DATE="N/A"
           fi
-
-          echo "=== Building Telegram Message ==="
-          echo "REPO: $REPO"
-          echo "PULL_REQUEST_NUMBER: $PULL_REQUEST_NUMBER"
-          echo "PULL_REQUEST_TITLE: $PULL_REQUEST_TITLE"
-          echo "PULL_REQUEST_BODY: $PULL_REQUEST_BODY"
-          echo "AUTHOR: $AUTHOR"
-          echo "CREATED_DATE: $CREATED_DATE"
-          echo "PULL_REQUEST_URL: $PULL_REQUEST_URL"
           
-          # Escape HTML special characters (only for title and body, as in original working code)
-          PULL_REQUEST_TITLE_ESC=$(echo "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+          PULL_REQUEST_TITLE_ESC=$(printf '%s' "$PULL_REQUEST_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' 2>&1 || echo "$PULL_REQUEST_TITLE")
           
           PULL_REQUEST_BODY_ESC=""
           if [ -n "$PULL_REQUEST_BODY" ] && [ "$PULL_REQUEST_BODY" != "null" ]; then
-            PULL_REQUEST_BODY_ESC=$(echo "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
+            PULL_REQUEST_BODY_ESC=$(printf '%s' "$PULL_REQUEST_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 2>&1 || echo "")
+            if [ ${#PULL_REQUEST_BODY_ESC} -gt 1000 ]; then
+              PULL_REQUEST_BODY_ESC="${PULL_REQUEST_BODY_ESC:0:1000}"
+            fi
           fi
           
-          echo "PULL_REQUEST_TITLE_ESC: $PULL_REQUEST_TITLE_ESC"
-          echo "PULL_REQUEST_BODY_ESC: $PULL_REQUEST_BODY_ESC"
-
-          # Build message with improved HTML formatting (exactly as in original working code)
           MESSAGE="Open PR <b><code>${REPO}</code> #${PULL_REQUEST_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<b>${PULL_REQUEST_TITLE_ESC}</b>"$'\n\n'
 
@@ -244,78 +150,14 @@ jobs:
           MESSAGE="${MESSAGE}Author: <b><code>${AUTHOR}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE:-N/A}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${PULL_REQUEST_URL}\">View Pull Request on GitHub</a>"
-
-          echo "=== Message Content ==="
-          echo "Message length: ${#MESSAGE} characters"
-          echo "Message byte size: $(echo -n "$MESSAGE" | wc -c) bytes"
-          echo ""
-          echo "Message preview (first 500 chars):"
-          echo "${MESSAGE:0:500}"
-          echo ""
-          echo "Message preview (last 200 chars):"
-          echo "${MESSAGE: -200}"
-          echo ""
-          echo "Full message (for debugging):"
-          echo "---START MESSAGE---"
-          echo "$MESSAGE"
-          echo "---END MESSAGE---"
-          echo "=== End Message Preview ==="
-
-          echo ""
-          echo "=== Preparing Telegram API Call ==="
-          echo "=== Final Credentials Check Before API Call ==="
           
-          echo ""
-          echo "TELEGRAM_BOT_TOKEN detailed check:"
-          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "❌ CRITICAL ERROR: TELEGRAM_BOT_TOKEN is EMPTY!"
-            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
-            echo "This will cause the API call to fail!"
-            exit 1
-          else
-            echo "✅ TELEGRAM_BOT_TOKEN is set"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
-            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
-            echo "Expected bot token format: starts with numbers and colon (e.g., 123456789:ABC...)"
-            if [[ ! "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+: ]]; then
-              echo "⚠️  WARNING: TELEGRAM_BOT_TOKEN format might be incorrect (should start with numbers:colon)"
-            fi
+          MAX_MESSAGE_LENGTH=4096
+          if [ ${#MESSAGE} -gt $MAX_MESSAGE_LENGTH ]; then
+            MESSAGE="${MESSAGE:0:$MAX_MESSAGE_LENGTH}"
           fi
-          
-          echo ""
-          echo "TELEGRAM_CHAT_ID detailed check:"
-          if [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ CRITICAL ERROR: TELEGRAM_CHAT_ID is EMPTY!"
-            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
-            echo "This will cause the API call to fail!"
-            exit 1
-          else
-            echo "✅ TELEGRAM_CHAT_ID is set"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
-            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
-            if [[ "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$ ]]; then
-              echo "✅ TELEGRAM_CHAT_ID format is valid (numeric)"
-            else
-              echo "⚠️  WARNING: TELEGRAM_CHAT_ID format might be incorrect (should be numeric or @channel)"
-            fi
-          fi
-          
-          echo ""
-          echo "=== Credentials Validation Complete ==="
-          
-          echo "API URL: https://api.telegram.org/bot***/sendMessage"
-          echo "Parse mode: HTML"
-          echo "Disable web page preview: true"
-          echo "=== Preparation Complete ==="
-          
-          echo ""
-          echo "=== Executing curl Command ==="
-          echo "Command: curl -s -w \"\\n%{http_code}\" -X POST \"https://api.telegram.org/bot***/sendMessage\" ..."
           
           set +e
-          RESPONSE=$(curl -v -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$MESSAGE" \
             -d parse_mode="HTML" \
@@ -324,74 +166,12 @@ jobs:
           CURL_EXIT_CODE=$?
           set -e
           
-          echo "=== Curl Execution Complete ==="
-          echo "Curl exit code: $CURL_EXIT_CODE"
-          echo "Response length: ${#RESPONSE} characters"
-          
           if [ $CURL_EXIT_CODE -ne 0 ]; then
-            echo "ERROR: Curl command failed with exit code $CURL_EXIT_CODE"
-            echo "Full curl output:"
-            echo "$RESPONSE"
             exit 1
           fi
 
-          echo ""
-          echo "=== Parsing Response ==="
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
           
-          echo "Extracted HTTP Code: '$HTTP_CODE'"
-          echo "HTTP Code length: ${#HTTP_CODE}"
-          echo "Body length: ${#BODY}"
-          echo "=== Parsing Complete ==="
-          
-          echo ""
-          echo "=== Telegram API Response Details ==="
-          echo "HTTP Status Code: $HTTP_CODE"
-          echo ""
-          echo "Response Body (first 500 chars):"
-          echo "${BODY:0:500}"
-          echo ""
-          echo "Response Body (last 200 chars):"
-          echo "${BODY: -200}"
-          echo ""
-          echo "Full Response Body:"
-          echo "---START RESPONSE BODY---"
-          echo "$BODY"
-          echo "---END RESPONSE BODY---"
-          echo ""
-          echo "Full Response (including HTTP code):"
-          echo "---START FULL RESPONSE---"
-          echo "$RESPONSE"
-          echo "---END FULL RESPONSE---"
-          echo "=== End Response Details ==="
-
-          echo ""
-          echo "=== Validating Response ==="
-          if [ -z "$HTTP_CODE" ]; then
-            echo "ERROR: HTTP_CODE is empty!"
-            echo "Full response: $RESPONSE"
+          if [ -z "$HTTP_CODE" ] || [ "$HTTP_CODE" != "200" ]; then
             exit 1
           fi
-          
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ HTTP Status: 200 OK"
-            echo "✅ Telegram pull request notification sent successfully"
-            echo "Response: $BODY"
-          else
-            echo "❌ HTTP Status: $HTTP_CODE (Expected: 200)"
-            echo "❌ Failed to send Telegram notification"
-            echo ""
-            echo "Error Details:"
-            echo "HTTP Code: $HTTP_CODE"
-            echo "Response Body: $BODY"
-            echo "Full curl response: $RESPONSE"
-            echo ""
-            echo "Common error codes:"
-            echo "400 - Bad Request (invalid message format)"
-            echo "401 - Unauthorized (invalid bot token)"
-            echo "403 - Forbidden (bot blocked or chat not found)"
-            echo "429 - Too Many Requests (rate limit)"
-            exit 1
-          fi
-          echo "=== Validation Complete ==="

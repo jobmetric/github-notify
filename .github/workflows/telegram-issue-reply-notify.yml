@@ -48,46 +48,10 @@ jobs:
           else
             composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           fi
-
-      - name: Find Date Converter Script
-        if: inputs.date_format != '' && inputs.date_format != null
-        id: find_script
-        run: |
-          echo "=== Searching for date-converter.sh script ==="
           
-          SCRIPT_PATH=""
-          
-          POSSIBLE_PATHS=(
-            "vendor/jobmetric/multi-calendar/bin/date-converter.sh"
-            "vendor/jobmetric/multi-calendar/date-converter.sh"
-            "vendor/jobmetric/multi-calendar/.github/scripts/date-converter.sh"
-          )
-          
-          echo "🔍 Checking package paths..."
-          for path in "${POSSIBLE_PATHS[@]}"; do
-            if [ -f "$path" ]; then
-              SCRIPT_PATH="$path"
-              echo "✅ Script found: $path"
-              break
-            fi
-          done
-          
-          if [ -z "$SCRIPT_PATH" ]; then
-            echo "⚠️  Script not found in package"
-            echo "📥 Downloading from repository..."
-            mkdir -p bin
-            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/master/bin/date-converter.sh -o bin/date-converter.sh || \
-            curl -sSL https://raw.githubusercontent.com/jobmetric/multi-calendar/main/bin/date-converter.sh -o bin/date-converter.sh || {
-              echo "❌ Failed to download script from repository"
-              exit 1
-            }
-            SCRIPT_PATH="bin/date-converter.sh"
-            echo "✅ Script downloaded: $SCRIPT_PATH"
+          if [ -f "vendor/bin/date-converter.sh" ]; then
+            chmod +x vendor/bin/date-converter.sh
           fi
-          
-          chmod +x "$SCRIPT_PATH"
-          echo "✅ Script is executable: $SCRIPT_PATH"
-          echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
 
       - name: Send Telegram notification for issue comment
         env:
@@ -98,47 +62,9 @@ jobs:
           TIMEZONE: ${{ inputs.timezone }}
         shell: bash
         run: |
-          set +e
-          echo "=== Starting Telegram Notification Script ==="
-          echo "Script started at: $(date)"
-          set -e
-          
-          echo ""
-          echo "=== Checking Telegram Credentials ==="
-          echo "TELEGRAM_BOT_TOKEN check:"
-          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "❌ ERROR: TELEGRAM_BOT_TOKEN is EMPTY or NOT SET!"
-            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
-          else
-            echo "✅ TELEGRAM_BOT_TOKEN is set"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
-            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
-          fi
-          
-          echo ""
-          echo "TELEGRAM_CHAT_ID check:"
-          if [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ ERROR: TELEGRAM_CHAT_ID is EMPTY or NOT SET!"
-            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
-          else
-            echo "✅ TELEGRAM_CHAT_ID is set"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
-            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
-          fi
-          
-          echo "=== Credentials Check Complete ==="
-          echo ""
-          
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ Telegram credentials not set. Skipping Issue comment notification."
-            echo "TELEGRAM_BOT_TOKEN empty: $([ -z "$TELEGRAM_BOT_TOKEN" ] && echo "YES" || echo "NO")"
-            echo "TELEGRAM_CHAT_ID empty: $([ -z "$TELEGRAM_CHAT_ID" ] && echo "YES" || echo "NO")"
             exit 0
           fi
-          
-          echo "✅ Credentials check passed - both token and chat_id are set"
 
           COMMENT_BODY="${{ github.event.comment.body }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
@@ -149,329 +75,89 @@ jobs:
           AUTHOR="${{ github.event.comment.user.login }}"
           CREATED_AT="${{ github.event.comment.created_at }}"
           
-          echo "Variables assigned successfully"
-          echo "CREATED_AT: $CREATED_AT"
-          echo "DATE_FORMAT: $DATE_FORMAT"
-          echo "CALENDAR_TYPE: $CALENDAR_TYPE"
-          echo "TIMEZONE: $TIMEZONE"
-          
-          echo ""
-          echo "=== Date Conversion Section ==="
           CREATED_DATE="$CREATED_AT"
-          echo "Initial CREATED_DATE: $CREATED_DATE"
+          SCRIPT_PATH="vendor/bin/date-converter.sh"
           
-          SCRIPT_PATH=""
-          echo "Checking DATE_FORMAT..."
-          if [ -n "$DATE_FORMAT" ]; then
-            echo "DATE_FORMAT is set: $DATE_FORMAT"
-            SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
-            echo "SCRIPT_PATH from step: '$SCRIPT_PATH'"
-            if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
-              echo "Warning: Date converter script not found. Using original date format."
-            else
-              echo "Script found at: $SCRIPT_PATH"
-            fi
-          else
-            echo "DATE_FORMAT is empty, skipping date conversion"
-          fi
-          
-          echo "Checking if date conversion should run..."
-          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
-            echo "Date conversion will run"
+          if [ -n "$DATE_FORMAT" ] && [ -f "$SCRIPT_PATH" ]; then
             set +e
             
-            echo "Verifying script exists and is accessible..."
-            echo "Script path: $SCRIPT_PATH"
-            echo "Script exists: $([ -f "$SCRIPT_PATH" ] && echo "YES" || echo "NO")"
-            echo "Script is readable: $([ -r "$SCRIPT_PATH" ] && echo "YES" || echo "NO")"
-            echo "Script is executable: $([ -x "$SCRIPT_PATH" ] && echo "YES" || echo "NO")"
-            echo "Script permissions: $(ls -l "$SCRIPT_PATH" 2>&1 || echo "cannot check")"
-            echo "Script size: $(stat -c%s "$SCRIPT_PATH" 2>&1 || echo "cannot check") bytes"
-            echo "Script first line: $(head -n1 "$SCRIPT_PATH" 2>&1 || echo "cannot read")"
-            
-            echo ""
-            echo "Making script executable if needed..."
             if [ ! -x "$SCRIPT_PATH" ]; then
-              echo "Script is not executable, running chmod..."
               chmod +x "$SCRIPT_PATH"
-              CHMOD_EXIT=$?
-              echo "chmod exit code: $CHMOD_EXIT"
-              if [ $CHMOD_EXIT -ne 0 ]; then
-                echo "ERROR: Failed to make script executable!"
-                echo "Script path: $SCRIPT_PATH"
-                echo "Script exists: $([ -f "$SCRIPT_PATH" ] && echo "yes" || echo "no")"
-                echo "Script permissions: $(ls -l "$SCRIPT_PATH" 2>&1 || echo "cannot check")"
-                echo "WARNING: Continuing despite chmod failure..."
-              else
-                echo "Script is now executable"
-                echo "Verifying executable permission: $([ -x "$SCRIPT_PATH" ] && echo "YES" || echo "NO")"
-              fi
-            else
-              echo "Script is already executable"
             fi
             
-            echo "Setting TARGET_CAL..."
             TARGET_CAL="${DATE_FORMAT}"
-            echo "TARGET_CAL: $TARGET_CAL"
             if [ "$DATE_FORMAT" == "both" ]; then
                TARGET_CAL="${CALENDAR_TYPE:-jalali}"
-               echo "TARGET_CAL changed to: $TARGET_CAL"
             fi
             
-            echo "Setting TARGET_TIMEZONE..."
             TARGET_TIMEZONE="${TIMEZONE:-UTC}"
-            echo "Initial TARGET_TIMEZONE: $TARGET_TIMEZONE"
             if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
               TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
-              echo "TARGET_TIMEZONE changed to: $TARGET_TIMEZONE"
             fi
-            echo "Final TARGET_TIMEZONE: $TARGET_TIMEZONE"
             
-            echo "Preparing DATE_TO_CONVERT..."
             DATE_TO_CONVERT="$CREATED_AT"
             FORMAT_INPUT=""
-            echo "Initial DATE_TO_CONVERT: $DATE_TO_CONVERT"
             
-            echo "Checking date format pattern..."
             if [[ "$CREATED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
-              echo "Date matches pattern"
               FORMAT_INPUT="Y-m-d\\TH:i:s"
-              echo "FORMAT_INPUT: $FORMAT_INPUT"
               if [[ "$CREATED_AT" =~ Z$ ]]; then
                 DATE_TO_CONVERT="${CREATED_AT%Z}"
-                echo "Removed Z, DATE_TO_CONVERT: $DATE_TO_CONVERT"
               elif [[ "$CREATED_AT" =~ \+[0-9]{2}:[0-9]{2}$ ]]; then
                 DATE_TO_CONVERT="${CREATED_AT%+*}"
-                echo "Removed timezone offset, DATE_TO_CONVERT: $DATE_TO_CONVERT"
               elif [[ "$CREATED_AT" =~ -[0-9]{2}:[0-9]{2}$ ]]; then
                 DATE_TO_CONVERT="${CREATED_AT%-*}"
-                echo "Removed negative timezone offset, DATE_TO_CONVERT: $DATE_TO_CONVERT"
               fi
-            else
-              echo "Date does not match pattern, FORMAT_INPUT will be empty"
             fi
-            echo "Final DATE_TO_CONVERT: $DATE_TO_CONVERT"
-            echo "Final FORMAT_INPUT: $FORMAT_INPUT"
-            
-            echo "Executing date converter script..."
-            echo "Script: $SCRIPT_PATH"
-            echo "Date: $DATE_TO_CONVERT"
-            echo "Format input: $FORMAT_INPUT"
-            echo "Target calendar: $TARGET_CAL"
-            echo "Timezone: $TARGET_TIMEZONE"
             
             if [ -n "$FORMAT_INPUT" ]; then
-              echo "Running with format-input..."
               CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
               EXIT_CODE=$?
             else
-              echo "Running without format-input..."
               CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
               EXIT_CODE=$?
             fi
-            echo "Script execution completed"
             
-            echo "Date conversion exit code: $EXIT_CODE"
-            echo "Date conversion result: $CONVERTED"
             if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-               echo "Date conversion successful"
                if [ "$DATE_FORMAT" == "both" ]; then
                  CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
                else
                  CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
                fi
-               echo "Final CREATED_DATE: $CREATED_DATE"
-            else
-              echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
             fi
             set -e
-          else
-            echo "Date conversion skipped (conditions not met)"
           fi
-          echo "=== Date Conversion Section Complete ==="
-          echo "Final CREATED_DATE: $CREATED_DATE"
 
-          echo ""
-          echo "=== Building Telegram Message ==="
-          echo "REPO: $REPO"
-          echo "ISSUE_NUMBER: $ISSUE_NUMBER"
-          echo "ISSUE_TITLE: $ISSUE_TITLE"
-          echo "COMMENT_BODY: $COMMENT_BODY"
-          echo "AUTHOR: $AUTHOR"
-          echo "CREATED_DATE: $CREATED_DATE"
-          echo "ISSUE_URL: $ISSUE_URL"
-          echo "COMMENT_URL: $COMMENT_URL"
-          
-          echo "=== Escaping HTML Content ==="
-          set +e
-          
-          # Escape HTML special characters (only for title and body, as in original working code)
-          echo "Escaping ISSUE_TITLE..."
           ISSUE_TITLE_ESC=""
           if [ -n "$ISSUE_TITLE" ]; then
-            echo "ISSUE_TITLE is not empty, escaping..."
-            echo "ISSUE_TITLE raw: $ISSUE_TITLE"
-            ISSUE_TITLE_ESC=$(printf '%s' "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' 2>&1)
-            ESCAPE_EXIT=$?
-            echo "ISSUE_TITLE escape exit code: $ESCAPE_EXIT"
-            if [ $ESCAPE_EXIT -ne 0 ]; then
-              echo "WARNING: Escape failed, using original title"
-              ISSUE_TITLE_ESC="$ISSUE_TITLE"
-            fi
-          else
-            echo "ISSUE_TITLE is empty"
+            ISSUE_TITLE_ESC=$(printf '%s' "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' 2>&1 || echo "$ISSUE_TITLE")
           fi
           
-          echo "Escaping COMMENT_BODY..."
           COMMENT_BODY_ESC=""
           if [ -n "$COMMENT_BODY" ] && [ "$COMMENT_BODY" != "null" ]; then
-            echo "COMMENT_BODY is not empty and not null, escaping..."
-            echo "COMMENT_BODY length: ${#COMMENT_BODY} characters"
-            echo "COMMENT_BODY first 200 chars: ${COMMENT_BODY:0:200}"
-            
-            COMMENT_BODY_ESC=$(printf '%s' "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 2>&1)
-            ESCAPE_EXIT=$?
-            echo "COMMENT_BODY escape exit code: $ESCAPE_EXIT"
-            echo "COMMENT_BODY_ESC length after escape: ${#COMMENT_BODY_ESC} characters"
-            
-            if [ $ESCAPE_EXIT -ne 0 ]; then
-              echo "WARNING: Escape failed, using empty body"
-              COMMENT_BODY_ESC=""
-            elif [ ${#COMMENT_BODY_ESC} -gt 1000 ]; then
-              echo "WARNING: COMMENT_BODY_ESC is longer than 1000 chars, truncating..."
+            COMMENT_BODY_ESC=$(printf '%s' "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 2>&1 || echo "")
+            if [ ${#COMMENT_BODY_ESC} -gt 1000 ]; then
               COMMENT_BODY_ESC="${COMMENT_BODY_ESC:0:1000}"
             fi
-          else
-            echo "COMMENT_BODY is empty or null"
           fi
           
-          set -e
-          echo "ISSUE_TITLE_ESC length: ${#ISSUE_TITLE_ESC}"
-          echo "ISSUE_TITLE_ESC: $ISSUE_TITLE_ESC"
-          echo "COMMENT_BODY_ESC length: ${#COMMENT_BODY_ESC}"
-          echo "COMMENT_BODY_ESC: $COMMENT_BODY_ESC"
-          echo "=== HTML Escaping Complete ==="
-
-          echo ""
-          echo "=== Building Message ==="
-          set +e
-          
-          # Build message with improved HTML formatting (exactly as in original working code)
-          echo "Step 1: Adding header..."
           MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
-          echo "Message after header: ${#MESSAGE} chars"
-          
-          echo "Step 2: Adding title..."
           MESSAGE="${MESSAGE}Title: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
-          echo "Message after title: ${#MESSAGE} chars"
           
-          echo "Step 3: Checking COMMENT_BODY_ESC..."
           if [ -n "$COMMENT_BODY_ESC" ] && [ "$COMMENT_BODY_ESC" != "null" ]; then
-            echo "Adding COMMENT_BODY_ESC..."
             MESSAGE="${MESSAGE}Comment: ${COMMENT_BODY_ESC}"$'\n\n'
-            echo "Message after comment: ${#MESSAGE} chars"
-          else
-            echo "COMMENT_BODY_ESC is empty or null, skipping"
           fi
 
-          echo "Step 4: Adding author..."
           MESSAGE="${MESSAGE}By: <b><code>${AUTHOR}</code></b>"$'\n'
-          echo "Message after author: ${#MESSAGE} chars"
-          
-          echo "Step 5: Adding time..."
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
-          echo "Message after time: ${#MESSAGE} chars"
-          
-          echo "Step 6: Adding links..."
           MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue</a> | <a href=\"${COMMENT_URL}\">View Comment</a>"
-          echo "Message after links: ${#MESSAGE} chars"
-          
-          set -e
-          echo "=== Message Building Complete ==="
-
-          echo "=== Message Content Validation ==="
-          echo "Message length: ${#MESSAGE} characters"
-          echo "Message byte size: $(echo -n "$MESSAGE" | wc -c) bytes"
           
           MAX_MESSAGE_LENGTH=4096
           if [ ${#MESSAGE} -gt $MAX_MESSAGE_LENGTH ]; then
-            echo "WARNING: Message is too long (${#MESSAGE} chars), Telegram limit is $MAX_MESSAGE_LENGTH chars"
-            echo "Truncating message..."
             MESSAGE="${MESSAGE:0:$MAX_MESSAGE_LENGTH}"
-            echo "Message length after truncation: ${#MESSAGE} characters"
-          else
-            echo "Message length is within Telegram limit ($MAX_MESSAGE_LENGTH chars)"
           fi
-          
-          echo "=== Message Content ==="
-          echo ""
-          echo "Message preview (first 500 chars):"
-          echo "${MESSAGE:0:500}"
-          echo ""
-          echo "Message preview (last 200 chars):"
-          echo "${MESSAGE: -200}"
-          echo ""
-          echo "Full message (for debugging):"
-          echo "---START MESSAGE---"
-          echo "$MESSAGE"
-          echo "---END MESSAGE---"
-          echo "=== End Message Preview ==="
-
-          echo ""
-          echo "=== Preparing Telegram API Call ==="
-          echo "=== Final Credentials Check Before API Call ==="
-          
-          echo ""
-          echo "TELEGRAM_BOT_TOKEN detailed check:"
-          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "❌ CRITICAL ERROR: TELEGRAM_BOT_TOKEN is EMPTY!"
-            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
-            echo "This will cause the API call to fail!"
-            exit 1
-          else
-            echo "✅ TELEGRAM_BOT_TOKEN is set"
-            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
-            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
-            echo "Expected bot token format: starts with numbers and colon (e.g., 123456789:ABC...)"
-            if [[ ! "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+: ]]; then
-              echo "⚠️  WARNING: TELEGRAM_BOT_TOKEN format might be incorrect (should start with numbers:colon)"
-            fi
-          fi
-          
-          echo ""
-          echo "TELEGRAM_CHAT_ID detailed check:"
-          if [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ CRITICAL ERROR: TELEGRAM_CHAT_ID is EMPTY!"
-            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
-            echo "This will cause the API call to fail!"
-            exit 1
-          else
-            echo "✅ TELEGRAM_CHAT_ID is set"
-            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
-            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
-            if [[ "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$ ]]; then
-              echo "✅ TELEGRAM_CHAT_ID format is valid (numeric)"
-            else
-              echo "⚠️  WARNING: TELEGRAM_CHAT_ID format might be incorrect (should be numeric or @channel)"
-            fi
-          fi
-          
-          echo ""
-          echo "=== Credentials Validation Complete ==="
-          
-          echo "API URL: https://api.telegram.org/bot***/sendMessage"
-          echo "Parse mode: HTML"
-          echo "Disable web page preview: true"
-          echo "=== Preparation Complete ==="
-          
-          echo ""
-          echo "=== Executing curl Command ==="
-          echo "Command: curl -s -w \"\\n%{http_code}\" -X POST \"https://api.telegram.org/bot***/sendMessage\" ..."
           
           set +e
-          RESPONSE=$(curl -v -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$MESSAGE" \
             -d parse_mode="HTML" \
@@ -480,74 +166,12 @@ jobs:
           CURL_EXIT_CODE=$?
           set -e
           
-          echo "=== Curl Execution Complete ==="
-          echo "Curl exit code: $CURL_EXIT_CODE"
-          echo "Response length: ${#RESPONSE} characters"
-          
           if [ $CURL_EXIT_CODE -ne 0 ]; then
-            echo "ERROR: Curl command failed with exit code $CURL_EXIT_CODE"
-            echo "Full curl output:"
-            echo "$RESPONSE"
             exit 1
           fi
 
-          echo ""
-          echo "=== Parsing Response ==="
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
           
-          echo "Extracted HTTP Code: '$HTTP_CODE'"
-          echo "HTTP Code length: ${#HTTP_CODE}"
-          echo "Body length: ${#BODY}"
-          echo "=== Parsing Complete ==="
-          
-          echo ""
-          echo "=== Telegram API Response Details ==="
-          echo "HTTP Status Code: $HTTP_CODE"
-          echo ""
-          echo "Response Body (first 500 chars):"
-          echo "${BODY:0:500}"
-          echo ""
-          echo "Response Body (last 200 chars):"
-          echo "${BODY: -200}"
-          echo ""
-          echo "Full Response Body:"
-          echo "---START RESPONSE BODY---"
-          echo "$BODY"
-          echo "---END RESPONSE BODY---"
-          echo ""
-          echo "Full Response (including HTTP code):"
-          echo "---START FULL RESPONSE---"
-          echo "$RESPONSE"
-          echo "---END FULL RESPONSE---"
-          echo "=== End Response Details ==="
-
-          echo ""
-          echo "=== Validating Response ==="
-          if [ -z "$HTTP_CODE" ]; then
-            echo "ERROR: HTTP_CODE is empty!"
-            echo "Full response: $RESPONSE"
+          if [ -z "$HTTP_CODE" ] || [ "$HTTP_CODE" != "200" ]; then
             exit 1
           fi
-          
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ HTTP Status: 200 OK"
-            echo "✅ Telegram issue comment notification sent successfully"
-            echo "Response: $BODY"
-          else
-            echo "❌ HTTP Status: $HTTP_CODE (Expected: 200)"
-            echo "❌ Failed to send Telegram notification"
-            echo ""
-            echo "Error Details:"
-            echo "HTTP Code: $HTTP_CODE"
-            echo "Response Body: $BODY"
-            echo "Full curl response: $RESPONSE"
-            echo ""
-            echo "Common error codes:"
-            echo "400 - Bad Request (invalid message format)"
-            echo "401 - Unauthorized (invalid bot token)"
-            echo "403 - Forbidden (bot blocked or chat not found)"
-            echo "429 - Too Many Requests (rate limit)"
-            exit 1
-          fi
-          echo "=== Validation Complete ==="
