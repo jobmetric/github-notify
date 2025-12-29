@@ -48,7 +48,9 @@ jobs:
           else
             composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           fi
-          
+          if [ -f "vendor/bin/date-converter.sh" ]; then
+            chmod +x vendor/bin/date-converter.sh
+          fi
 
       - name: Send Telegram notification for opened issue
         env:
@@ -78,7 +80,7 @@ jobs:
             
             TARGET_CAL="${DATE_FORMAT}"
             if [ "$DATE_FORMAT" == "both" ]; then
-               TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+              TARGET_CAL="${CALENDAR_TYPE:-jalali}"
             fi
             
             TARGET_TIMEZONE="${TIMEZONE:-UTC}"
@@ -86,34 +88,19 @@ jobs:
               TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
             fi
             
-            DATE_TO_CONVERT="$CREATED_AT"
-            FORMAT_INPUT=""
-            
-            if [[ "$CREATED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
-              FORMAT_INPUT="Y-m-d\\TH:i:s"
-              if [[ "$CREATED_AT" =~ Z$ ]]; then
-                DATE_TO_CONVERT="${CREATED_AT%Z}"
-              elif [[ "$CREATED_AT" =~ \+[0-9]{2}:[0-9]{2}$ ]]; then
-                DATE_TO_CONVERT="${CREATED_AT%+*}"
-              elif [[ "$CREATED_AT" =~ -[0-9]{2}:[0-9]{2}$ ]]; then
-                DATE_TO_CONVERT="${CREATED_AT%-*}"
-              fi
-            fi
-            
-            if [ -n "$FORMAT_INPUT" ]; then
-              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1 | tail -n1)
+            if [ -f "vendor/bin/date-converter.sh" ]; then
+              CONVERTED=$(./vendor/bin/date-converter.sh "$CREATED_AT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
               EXIT_CODE=$?
             else
-              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1 | tail -n1)
-              EXIT_CODE=$?
+              EXIT_CODE=1
             fi
             
             if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]] && [[ ! "$CONVERTED" =~ ^Warning ]]; then
-               if [ "$DATE_FORMAT" == "both" ]; then
-                 CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
-               else
-                 CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
-               fi
+              if [ "$DATE_FORMAT" == "both" ]; then
+                CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
+              else
+                CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
+              fi
             fi
             set -e
           elif [ -n "$CREATED_AT" ]; then
