@@ -30,27 +30,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        if: ${{ inputs.date_format }}
+        if: inputs.date_format != '' && inputs.date_format != null
         uses: actions/checkout@v4
 
       - name: Setup PHP
-        if: ${{ inputs.date_format }}
+        if: inputs.date_format != '' && inputs.date_format != null
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
           extensions: intl
 
       - name: Install Dependencies
-        if: ${{ inputs.date_format }}
+        if: inputs.date_format != '' && inputs.date_format != null
         run: |
           if [ -f "composer.json" ]; then
             composer install --no-dev --no-interaction --prefer-dist
           else
-            composer require jobmetric/multi-calendar --prefer-dist --no-interaction
+            composer require jobmetric/multi-calendar:dev-main --prefer-dist --no-interaction || composer require jobmetric/multi-calendar:dev-master --prefer-dist --no-interaction
           fi
-          if [ -f "vendor/bin/date-converter" ]; then
-            chmod +x vendor/bin/date-converter
-          fi
+          
+          chmod +x vendor/bin/date-converter* || true
 
       - name: Send Telegram notification for issue comment
         env:
@@ -77,8 +76,6 @@ jobs:
           CREATED_DATE="$CREATED_AT"
           
           if [ -n "$DATE_FORMAT" ]; then
-            set +e
-            
             TARGET_CAL="${DATE_FORMAT}"
             if [ "$DATE_FORMAT" == "both" ]; then
                TARGET_CAL="${CALENDAR_TYPE:-jalali}"
@@ -91,31 +88,32 @@ jobs:
                fi
             fi
             
+            CONVERTER_BIN=""
             if [ -f "vendor/bin/date-converter" ]; then
-              CONVERTED=$(./vendor/bin/date-converter "$CREATED_AT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1 | tail -n1)
-              EXIT_CODE=$?
-            else
-              EXIT_CODE=1
+                CONVERTER_BIN="vendor/bin/date-converter"
+            elif [ -f "vendor/bin/date-converter.sh" ]; then
+                CONVERTER_BIN="vendor/bin/date-converter.sh"
             fi
-            
-            if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]] && [[ ! "$CONVERTED" =~ ^Warning ]]; then
-               if [ "$DATE_FORMAT" == "both" ]; then
-                 CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
-               else
-                 CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
-               fi
+
+            if [ -n "$CONVERTER_BIN" ]; then
+              CONVERTED=$(php "$CONVERTER_BIN" "$CREATED_AT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              
+              if [ $? -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]] && [[ ! "$CONVERTED" =~ ^Warning ]]; then
+                 CLEAN_DATE=$(echo "$CONVERTED" | tail -n1)
+                 if [ "$DATE_FORMAT" == "both" ]; then
+                   CREATED_DATE="${CREATED_AT} / ${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                 else
+                   CREATED_DATE="${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                 fi
+              fi
             fi
-            set -e
           fi
 
-          ISSUE_TITLE_ESC=""
-          if [ -n "$ISSUE_TITLE" ]; then
-            ISSUE_TITLE_ESC=$(printf '%s' "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' 2>&1 || echo "$ISSUE_TITLE")
-          fi
+          ISSUE_TITLE_ESC=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
           
           COMMENT_BODY_ESC=""
           if [ -n "$COMMENT_BODY" ] && [ "$COMMENT_BODY" != "null" ]; then
-            COMMENT_BODY_ESC=$(printf '%s' "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 2>&1 || echo "")
+            COMMENT_BODY_ESC=$(echo "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000)
             if [ ${#COMMENT_BODY_ESC} -gt 1000 ]; then
               COMMENT_BODY_ESC="${COMMENT_BODY_ESC:0:1000}..."
             fi
@@ -132,27 +130,14 @@ jobs:
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue</a> | <a href=\"${COMMENT_URL}\">View Comment</a>"
           
-          MAX_MESSAGE_LENGTH=4096
-          if [ ${#MESSAGE} -gt $MAX_MESSAGE_LENGTH ]; then
-            MESSAGE="${MESSAGE:0:$MAX_MESSAGE_LENGTH}"
-          fi
-          
-          set +e
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$MESSAGE" \
             -d parse_mode="HTML" \
-            -d disable_web_page_preview=true 2>&1)
+            -d disable_web_page_preview=true)
           
-          CURL_EXIT_CODE=$?
-          set -e
-          
-          if [ $CURL_EXIT_CODE -ne 0 ]; then
-            exit 1
-          fi
-
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           
-          if [ -z "$HTTP_CODE" ] || [ "$HTTP_CODE" != "200" ]; then
+          if [ "$HTTP_CODE" != "200" ]; then
             exit 1
           fi
