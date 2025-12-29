@@ -49,9 +49,6 @@ jobs:
             composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           fi
           
-          if [ -f "vendor/bin/date-converter.sh" ]; then
-            chmod +x vendor/bin/date-converter.sh
-          fi
 
       - name: Send Telegram notification for issue comment
         env:
@@ -76,14 +73,9 @@ jobs:
           CREATED_AT="${{ github.event.comment.created_at }}"
           
           CREATED_DATE="$CREATED_AT"
-          SCRIPT_PATH="vendor/bin/date-converter.sh"
           
-          if [ -n "$DATE_FORMAT" ] && [ -f "$SCRIPT_PATH" ]; then
+          if [ -n "$DATE_FORMAT" ] && [ -f "composer.json" ]; then
             set +e
-            
-            if [ ! -x "$SCRIPT_PATH" ]; then
-              chmod +x "$SCRIPT_PATH"
-            fi
             
             TARGET_CAL="${DATE_FORMAT}"
             if [ "$DATE_FORMAT" == "both" ]; then
@@ -110,10 +102,10 @@ jobs:
             fi
             
             if [ -n "$FORMAT_INPUT" ]; then
-              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
               EXIT_CODE=$?
             else
-              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
               EXIT_CODE=$?
             fi
             
