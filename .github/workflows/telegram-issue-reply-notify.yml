@@ -13,7 +13,7 @@ on:
         type: string
         default: "jalali"
       timezone:
-        description: "Timezone for date conversion (e.g., UTC, Asia/Tehran)"
+        description: "Timezone for date conversion"
         required: false
         type: string
         default: "UTC"
@@ -48,8 +48,8 @@ jobs:
           else
             composer require jobmetric/multi-calendar --prefer-dist --no-interaction
           fi
-          if [ -f "vendor/bin/date-converter.sh" ]; then
-            chmod +x vendor/bin/date-converter.sh
+          if [ -f "vendor/bin/date-converter" ]; then
+            chmod +x vendor/bin/date-converter
           fi
 
       - name: Send Telegram notification for issue comment
@@ -81,27 +81,29 @@ jobs:
             
             TARGET_CAL="${DATE_FORMAT}"
             if [ "$DATE_FORMAT" == "both" ]; then
-              TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+               TARGET_CAL="${CALENDAR_TYPE:-jalali}"
             fi
             
             TARGET_TIMEZONE="${TIMEZONE:-UTC}"
             if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
-              TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+               if [ "${TIMEZONE}" == "UTC" ] || [ -z "${TIMEZONE}" ]; then
+                   TARGET_TIMEZONE="Asia/Tehran"
+               fi
             fi
             
-            if [ -f "vendor/bin/date-converter.sh" ]; then
-              CONVERTED=$(./vendor/bin/date-converter.sh "$CREATED_AT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+            if [ -f "vendor/bin/date-converter" ]; then
+              CONVERTED=$(./vendor/bin/date-converter "$CREATED_AT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1 | tail -n1)
               EXIT_CODE=$?
             else
               EXIT_CODE=1
             fi
             
             if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]] && [[ ! "$CONVERTED" =~ ^Warning ]]; then
-              if [ "$DATE_FORMAT" == "both" ]; then
-                CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
-              else
-                CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
-              fi
+               if [ "$DATE_FORMAT" == "both" ]; then
+                 CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
+               else
+                 CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
+               fi
             fi
             set -e
           fi
@@ -115,7 +117,7 @@ jobs:
           if [ -n "$COMMENT_BODY" ] && [ "$COMMENT_BODY" != "null" ]; then
             COMMENT_BODY_ESC=$(printf '%s' "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 2>&1 || echo "")
             if [ ${#COMMENT_BODY_ESC} -gt 1000 ]; then
-              COMMENT_BODY_ESC="${COMMENT_BODY_ESC:0:1000}"
+              COMMENT_BODY_ESC="${COMMENT_BODY_ESC:0:1000}..."
             fi
           fi
           
