@@ -103,12 +103,42 @@ jobs:
           echo "Script started at: $(date)"
           set -e
           
+          echo ""
+          echo "=== Checking Telegram Credentials ==="
+          echo "TELEGRAM_BOT_TOKEN check:"
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "❌ ERROR: TELEGRAM_BOT_TOKEN is EMPTY or NOT SET!"
+            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
+          else
+            echo "✅ TELEGRAM_BOT_TOKEN is set"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
+            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
+          fi
+          
+          echo ""
+          echo "TELEGRAM_CHAT_ID check:"
+          if [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "❌ ERROR: TELEGRAM_CHAT_ID is EMPTY or NOT SET!"
+            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
+          else
+            echo "✅ TELEGRAM_CHAT_ID is set"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
+            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
+          fi
+          
+          echo "=== Credentials Check Complete ==="
+          echo ""
+          
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "Telegram credentials not set. Skipping Issue comment notification."
+            echo "❌ Telegram credentials not set. Skipping Issue comment notification."
+            echo "TELEGRAM_BOT_TOKEN empty: $([ -z "$TELEGRAM_BOT_TOKEN" ] && echo "YES" || echo "NO")"
+            echo "TELEGRAM_CHAT_ID empty: $([ -z "$TELEGRAM_CHAT_ID" ] && echo "YES" || echo "NO")"
             exit 0
           fi
           
-          echo "Credentials check passed"
+          echo "✅ Credentials check passed - both token and chat_id are set"
 
           COMMENT_BODY="${{ github.event.comment.body }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
@@ -223,9 +253,14 @@ jobs:
           ISSUE_TITLE_ESC=""
           if [ -n "$ISSUE_TITLE" ]; then
             echo "ISSUE_TITLE is not empty, escaping..."
-            ISSUE_TITLE_ESC=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' || echo "$ISSUE_TITLE")
+            echo "ISSUE_TITLE raw: $ISSUE_TITLE"
+            ISSUE_TITLE_ESC=$(printf '%s' "$ISSUE_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' 2>&1)
             ESCAPE_EXIT=$?
             echo "ISSUE_TITLE escape exit code: $ESCAPE_EXIT"
+            if [ $ESCAPE_EXIT -ne 0 ]; then
+              echo "WARNING: Escape failed, using original title"
+              ISSUE_TITLE_ESC="$ISSUE_TITLE"
+            fi
           else
             echo "ISSUE_TITLE is empty"
           fi
@@ -234,9 +269,21 @@ jobs:
           COMMENT_BODY_ESC=""
           if [ -n "$COMMENT_BODY" ] && [ "$COMMENT_BODY" != "null" ]; then
             echo "COMMENT_BODY is not empty and not null, escaping..."
-            COMMENT_BODY_ESC=$(echo "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 || echo "")
+            echo "COMMENT_BODY length: ${#COMMENT_BODY} characters"
+            echo "COMMENT_BODY first 200 chars: ${COMMENT_BODY:0:200}"
+            
+            COMMENT_BODY_ESC=$(printf '%s' "$COMMENT_BODY" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' | head -c 1000 2>&1)
             ESCAPE_EXIT=$?
             echo "COMMENT_BODY escape exit code: $ESCAPE_EXIT"
+            echo "COMMENT_BODY_ESC length after escape: ${#COMMENT_BODY_ESC} characters"
+            
+            if [ $ESCAPE_EXIT -ne 0 ]; then
+              echo "WARNING: Escape failed, using empty body"
+              COMMENT_BODY_ESC=""
+            elif [ ${#COMMENT_BODY_ESC} -gt 1000 ]; then
+              echo "WARNING: COMMENT_BODY_ESC is longer than 1000 chars, truncating..."
+              COMMENT_BODY_ESC="${COMMENT_BODY_ESC:0:1000}"
+            fi
           else
             echo "COMMENT_BODY is empty or null"
           fi
@@ -285,9 +332,21 @@ jobs:
           set -e
           echo "=== Message Building Complete ==="
 
-          echo "=== Message Content ==="
+          echo "=== Message Content Validation ==="
           echo "Message length: ${#MESSAGE} characters"
           echo "Message byte size: $(echo -n "$MESSAGE" | wc -c) bytes"
+          
+          MAX_MESSAGE_LENGTH=4096
+          if [ ${#MESSAGE} -gt $MAX_MESSAGE_LENGTH ]; then
+            echo "WARNING: Message is too long (${#MESSAGE} chars), Telegram limit is $MAX_MESSAGE_LENGTH chars"
+            echo "Truncating message..."
+            MESSAGE="${MESSAGE:0:$MAX_MESSAGE_LENGTH}"
+            echo "Message length after truncation: ${#MESSAGE} characters"
+          else
+            echo "Message length is within Telegram limit ($MAX_MESSAGE_LENGTH chars)"
+          fi
+          
+          echo "=== Message Content ==="
           echo ""
           echo "Message preview (first 500 chars):"
           echo "${MESSAGE:0:500}"
@@ -303,21 +362,47 @@ jobs:
 
           echo ""
           echo "=== Preparing Telegram API Call ==="
-          echo "Checking TELEGRAM_BOT_TOKEN..."
+          echo "=== Final Credentials Check Before API Call ==="
+          
+          echo ""
+          echo "TELEGRAM_BOT_TOKEN detailed check:"
           if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "ERROR: TELEGRAM_BOT_TOKEN is empty!"
+            echo "❌ CRITICAL ERROR: TELEGRAM_BOT_TOKEN is EMPTY!"
+            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
+            echo "This will cause the API call to fail!"
             exit 1
           else
-            echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5} (length: ${#TELEGRAM_BOT_TOKEN})"
+            echo "✅ TELEGRAM_BOT_TOKEN is set"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
+            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
+            echo "Expected bot token format: starts with numbers and colon (e.g., 123456789:ABC...)"
+            if [[ ! "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+: ]]; then
+              echo "⚠️  WARNING: TELEGRAM_BOT_TOKEN format might be incorrect (should start with numbers:colon)"
+            fi
           fi
           
-          echo "Checking TELEGRAM_CHAT_ID..."
+          echo ""
+          echo "TELEGRAM_CHAT_ID detailed check:"
           if [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "ERROR: TELEGRAM_CHAT_ID is empty!"
+            echo "❌ CRITICAL ERROR: TELEGRAM_CHAT_ID is EMPTY!"
+            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
+            echo "This will cause the API call to fail!"
             exit 1
           else
-            echo "TELEGRAM_CHAT_ID: $TELEGRAM_CHAT_ID (length: ${#TELEGRAM_CHAT_ID})"
+            echo "✅ TELEGRAM_CHAT_ID is set"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
+            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
+            if [[ "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$ ]]; then
+              echo "✅ TELEGRAM_CHAT_ID format is valid (numeric)"
+            else
+              echo "⚠️  WARNING: TELEGRAM_CHAT_ID format might be incorrect (should be numeric or @channel)"
+            fi
           fi
+          
+          echo ""
+          echo "=== Credentials Validation Complete ==="
           
           echo "API URL: https://api.telegram.org/bot***/sendMessage"
           echo "Parse mode: HTML"

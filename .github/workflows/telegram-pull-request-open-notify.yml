@@ -98,11 +98,48 @@ jobs:
           TIMEZONE: ${{ inputs.timezone }}
         shell: bash
         run: |
+          set +e
+          echo "=== Starting Telegram Notification Script ==="
+          echo "Script started at: $(date)"
+          set -e
+          
+          echo ""
+          echo "=== Checking Telegram Credentials ==="
+          echo "TELEGRAM_BOT_TOKEN check:"
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "❌ ERROR: TELEGRAM_BOT_TOKEN is EMPTY or NOT SET!"
+            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
+          else
+            echo "✅ TELEGRAM_BOT_TOKEN is set"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
+            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
+          fi
+          
+          echo ""
+          echo "TELEGRAM_CHAT_ID check:"
+          if [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "❌ ERROR: TELEGRAM_CHAT_ID is EMPTY or NOT SET!"
+            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
+          else
+            echo "✅ TELEGRAM_CHAT_ID is set"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
+            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
+          fi
+          
+          echo "=== Credentials Check Complete ==="
+          echo ""
+          
           # Skip if credentials not set
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "Telegram credentials not set. Skipping Pull Request notification."
+            echo "❌ Telegram credentials not set. Skipping Pull Request notification."
+            echo "TELEGRAM_BOT_TOKEN empty: $([ -z "$TELEGRAM_BOT_TOKEN" ] && echo "YES" || echo "NO")"
+            echo "TELEGRAM_CHAT_ID empty: $([ -z "$TELEGRAM_CHAT_ID" ] && echo "YES" || echo "NO")"
             exit 0
           fi
+          
+          echo "✅ Credentials check passed - both token and chat_id are set"
 
           # Get Pull Request details
           PULL_REQUEST_TITLE="${{ github.event.pull_request.title }}"
@@ -226,21 +263,47 @@ jobs:
 
           echo ""
           echo "=== Preparing Telegram API Call ==="
-          echo "Checking TELEGRAM_BOT_TOKEN..."
+          echo "=== Final Credentials Check Before API Call ==="
+          
+          echo ""
+          echo "TELEGRAM_BOT_TOKEN detailed check:"
           if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "ERROR: TELEGRAM_BOT_TOKEN is empty!"
+            echo "❌ CRITICAL ERROR: TELEGRAM_BOT_TOKEN is EMPTY!"
+            echo "TELEGRAM_BOT_TOKEN value: '$TELEGRAM_BOT_TOKEN'"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
+            echo "This will cause the API call to fail!"
             exit 1
           else
-            echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5} (length: ${#TELEGRAM_BOT_TOKEN})"
+            echo "✅ TELEGRAM_BOT_TOKEN is set"
+            echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN} characters"
+            echo "TELEGRAM_BOT_TOKEN preview: ${TELEGRAM_BOT_TOKEN:0:10}...${TELEGRAM_BOT_TOKEN: -5}"
+            echo "Expected bot token format: starts with numbers and colon (e.g., 123456789:ABC...)"
+            if [[ ! "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+: ]]; then
+              echo "⚠️  WARNING: TELEGRAM_BOT_TOKEN format might be incorrect (should start with numbers:colon)"
+            fi
           fi
           
-          echo "Checking TELEGRAM_CHAT_ID..."
+          echo ""
+          echo "TELEGRAM_CHAT_ID detailed check:"
           if [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "ERROR: TELEGRAM_CHAT_ID is empty!"
+            echo "❌ CRITICAL ERROR: TELEGRAM_CHAT_ID is EMPTY!"
+            echo "TELEGRAM_CHAT_ID value: '$TELEGRAM_CHAT_ID'"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID}"
+            echo "This will cause the API call to fail!"
             exit 1
           else
-            echo "TELEGRAM_CHAT_ID: $TELEGRAM_CHAT_ID (length: ${#TELEGRAM_CHAT_ID})"
+            echo "✅ TELEGRAM_CHAT_ID is set"
+            echo "TELEGRAM_CHAT_ID length: ${#TELEGRAM_CHAT_ID} characters"
+            echo "TELEGRAM_CHAT_ID value: $TELEGRAM_CHAT_ID"
+            if [[ "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$ ]]; then
+              echo "✅ TELEGRAM_CHAT_ID format is valid (numeric)"
+            else
+              echo "⚠️  WARNING: TELEGRAM_CHAT_ID format might be incorrect (should be numeric or @channel)"
+            fi
           fi
+          
+          echo ""
+          echo "=== Credentials Validation Complete ==="
           
           echo "API URL: https://api.telegram.org/bot***/sendMessage"
           echo "Parse mode: HTML"
