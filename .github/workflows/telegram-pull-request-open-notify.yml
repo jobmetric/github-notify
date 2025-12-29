@@ -101,14 +101,14 @@ jobs:
             fi
             
             if [ -n "$FORMAT_INPUT" ]; then
-              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1 | tail -n1)
               EXIT_CODE=$?
             else
-              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              CONVERTED=$(composer run date-convert -- "$DATE_TO_CONVERT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1 | tail -n1)
               EXIT_CODE=$?
             fi
             
-            if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
+            if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]] && [[ ! "$CONVERTED" =~ ^Warning ]]; then
                if [ "$DATE_FORMAT" == "both" ]; then
                  CREATED_DATE="${CREATED_AT} / ${CONVERTED} ${TARGET_TIMEZONE}"
                else
