@@ -45,11 +45,17 @@ jobs:
         run: |
           if [ -f "composer.json" ]; then
             composer install --no-dev --no-interaction --prefer-dist
+            if [ ! -f "vendor/bin/date-converter" ] && [ ! -f "vendor/bin/date-converter.sh" ]; then
+              echo "date-converter not found, installing jobmetric/multi-calendar..."
+              composer require jobmetric/multi-calendar:dev-main --prefer-dist --no-interaction || composer require jobmetric/multi-calendar:dev-master --prefer-dist --no-interaction
+            fi
           else
             composer require jobmetric/multi-calendar:dev-main --prefer-dist --no-interaction || composer require jobmetric/multi-calendar:dev-master --prefer-dist --no-interaction
           fi
           
           chmod +x vendor/bin/date-converter* || true
+          echo "Checking for date-converter after installation..."
+          ls -la vendor/bin/date-converter* 2>&1 || echo "date-converter still not found"
 
       - name: Send Telegram notification for issue comment
         env:
@@ -101,10 +107,17 @@ jobs:
             elif [ -f "vendor/bin/date-converter.sh" ]; then
                 CONVERTER_BIN="vendor/bin/date-converter.sh"
                 echo "DEBUG: Found vendor/bin/date-converter.sh"
+            elif [ -f "vendor/jobmetric/multi-calendar/bin/date-converter.sh" ]; then
+                CONVERTER_BIN="vendor/jobmetric/multi-calendar/bin/date-converter.sh"
+                echo "DEBUG: Found vendor/jobmetric/multi-calendar/bin/date-converter.sh"
             else
                 echo "DEBUG: date-converter binary NOT FOUND!"
                 echo "DEBUG: Checking vendor/bin directory..."
                 ls -la vendor/bin/ 2>&1 || echo "DEBUG: vendor/bin directory does not exist"
+                echo "DEBUG: Checking vendor/jobmetric/multi-calendar/bin directory..."
+                ls -la vendor/jobmetric/multi-calendar/bin/ 2>&1 || echo "DEBUG: vendor/jobmetric/multi-calendar/bin directory does not exist"
+                echo "DEBUG: Searching for date-converter in vendor directory..."
+                find vendor -name "date-converter*" -type f 2>&1 | head -10 || echo "DEBUG: No date-converter found in vendor"
             fi
             echo "DEBUG: CONVERTER_BIN = '$CONVERTER_BIN'"
 
