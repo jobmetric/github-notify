@@ -75,36 +75,73 @@ jobs:
           
           CREATED_DATE="$CREATED_AT"
           
-          if [ -n "$DATE_FORMAT" ]; then
+‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍          echo "DEBUG: DATE_FORMAT input = '$DATE_FORMAT'"
+          echo "DEBUG: CALENDAR_TYPE input = '$CALENDAR_TYPE'"
+          echo "DEBUG: TIMEZONE input = '$TIMEZONE'"
+          echo "DEBUG: DATE_FORMAT is empty check: [ -n \"$DATE_FORMAT\" ] = $([ -n "$DATE_FORMAT" ] && echo "true" || echo "false")"
+          
+          if [ -n "$DATE_FORMAT" ] && [ "$DATE_FORMAT" != "null" ] && [ "$DATE_FORMAT" != "" ]; then
+            echo "DEBUG: Entering date conversion block"
             TARGET_CAL="${DATE_FORMAT}"
             if [ "$DATE_FORMAT" == "both" ]; then
                TARGET_CAL="${CALENDAR_TYPE:-jalali}"
             fi
             
-            TARGET_TIMEZONE="${TIMEZONE:-UTC}"
             if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
-               if [ "${TIMEZONE}" == "UTC" ] || [ -z "${TIMEZONE}" ]; then
-                   TARGET_TIMEZONE="Asia/Tehran"
-               fi
+              TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+            else
+              TARGET_TIMEZONE="${TIMEZONE:-UTC}"
             fi
             
             CONVERTER_BIN=""
+            echo "DEBUG: Looking for date-converter binary..."
             if [ -f "vendor/bin/date-converter" ]; then
                 CONVERTER_BIN="vendor/bin/date-converter"
+                echo "DEBUG: Found vendor/bin/date-converter"
             elif [ -f "vendor/bin/date-converter.sh" ]; then
                 CONVERTER_BIN="vendor/bin/date-converter.sh"
+                echo "DEBUG: Found vendor/bin/date-converter.sh"
+            else
+                echo "DEBUG: date-converter binary NOT FOUND!"
+                echo "DEBUG: Checking vendor/bin directory..."
+                ls -la vendor/bin/ 2>&1 || echo "DEBUG: vendor/bin directory does not exist"
             fi
+            echo "DEBUG: CONVERTER_BIN = '$CONVERTER_BIN'"
 
             if [ -n "$CONVERTER_BIN" ]; then
-              CONVERTED=$(php "$CONVERTER_BIN" "$CREATED_AT" --date-format gregorian --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              echo "DEBUG: Converter binary found, proceeding with conversion"
+              set +e
+              echo "DEBUG: CREATED_AT = $CREATED_AT"
+              DATE_TO_CONVERT="${CREATED_AT}"
+              DATE_TO_CONVERT="${DATE_TO_CONVERT%Z}"
+              if [[ "$DATE_TO_CONVERT" == *"+"* ]]; then
+                DATE_TO_CONVERT="${DATE_TO_CONVERT%%+*}"
+              fi
+              if [[ "$DATE_TO_CONVERT" == *"-"* ]] && [[ "$DATE_TO_CONVERT" =~ [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}- ]]; then
+                DATE_TO_CONVERT="${DATE_TO_CONVERT%%-*}"
+              fi
+              echo "DEBUG: DATE_TO_CONVERT = $DATE_TO_CONVERT"
+              echo "DEBUG: TARGET_CAL = $TARGET_CAL"
+              echo "DEBUG: TARGET_TIMEZONE = $TARGET_TIMEZONE"
+              echo "DEBUG: Command: php $CONVERTER_BIN \"$DATE_TO_CONVERT\" --date-format gregorian --format-input \"Y-m-d\\TH:i:s\" --to \"$TARGET_CAL\" --format-output \"Y-m-d H:i:s\" --from-timezone UTC --to-timezone \"$TARGET_TIMEZONE\""
+              CONVERTED=$(php "$CONVERTER_BIN" "$DATE_TO_CONVERT" --date-format gregorian --format-input "Y-m-d\TH:i:s" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --from-timezone UTC --to-timezone "$TARGET_TIMEZONE" 2>&1)
+              EXIT_CODE=$?
+              echo "DEBUG: EXIT_CODE = $EXIT_CODE"
+              echo "DEBUG: CONVERTED = $CONVERTED"
+              set -e
               
-              if [ $? -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]] && [[ ! "$CONVERTED" =~ ^Warning ]]; then
-                 CLEAN_DATE=$(echo "$CONVERTED" | tail -n1)
-                 if [ "$DATE_FORMAT" == "both" ]; then
-                   CREATED_DATE="${CREATED_AT} / ${CLEAN_DATE} (${TARGET_TIMEZONE})"
-                 else
-                   CREATED_DATE="${CLEAN_DATE} (${TARGET_TIMEZONE})"
-                 fi
+              if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]] && [[ ! "$CONVERTED" =~ ^Warning ]]; then
+                CLEAN_DATE=$(echo "$CONVERTED" | tail -n1)
+                echo "DEBUG: CLEAN_DATE = $CLEAN_DATE"
+                if [ "$DATE_FORMAT" == "both" ]; then
+                  CREATED_DATE="${CREATED_AT} / ${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                else
+                  CREATED_DATE="${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                fi
+                echo "DEBUG: CREATED_DATE (final) = $CREATED_DATE"
+              else
+                echo "DEBUG: Conversion failed or returned error/warning. Using original CREATED_AT"
+                echo "DEBUG: CREATED_DATE (fallback) = $CREATED_DATE"
               fi
             fi
           fi
@@ -119,6 +156,7 @@ jobs:
             fi
           fi
           
+          echo "DEBUG: Final CREATED_DATE before message = $CREATED_DATE"
           MESSAGE="New comment on issue <b><code>${REPO}</code> #${ISSUE_NUMBER}</b>"$'\n\n'
           MESSAGE="${MESSAGE}Title: <b>${ISSUE_TITLE_ESC}</b>"$'\n\n'
           
@@ -128,6 +166,7 @@ jobs:
 
           MESSAGE="${MESSAGE}By: <b><code>${AUTHOR}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          echo "DEBUG: Final MESSAGE Time part = Time: <b>${CREATED_DATE}</b>"
           MESSAGE="${MESSAGE}<a href=\"${ISSUE_URL}\">View Issue</a> | <a href=\"${COMMENT_URL}\">View Comment</a>"
           
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
