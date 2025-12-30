@@ -75,7 +75,7 @@ jobs:
           
           CREATED_DATE="$CREATED_AT"
           
-‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍‍          echo "DEBUG: DATE_FORMAT input = '$DATE_FORMAT'"
+          echo "DEBUG: DATE_FORMAT input = '$DATE_FORMAT'"
           echo "DEBUG: CALENDAR_TYPE input = '$CALENDAR_TYPE'"
           echo "DEBUG: TIMEZONE input = '$TIMEZONE'"
           echo "DEBUG: DATE_FORMAT is empty check: [ -n \"$DATE_FORMAT\" ] = $([ -n "$DATE_FORMAT" ] && echo "true" || echo "false")"
